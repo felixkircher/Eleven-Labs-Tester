@@ -174,7 +174,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
     </div>
 
     <!-- Scenarios -->
-    <div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
         <div style="display:flex;align-items:center;gap:6px">
           <div class="section-title" style="margin-bottom:0">🧪 Szenarien</div>
@@ -228,7 +228,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
       </div>
       <div style="display:flex;gap:4px">
         <button class="btn btn-ghost btn-small" onclick="downloadCurrentLog()">⬇ Export</button>
-        <button class="btn btn-ghost btn-small" onclick="clearTranscript()">Löschen</button>
+        <button class="btn btn-ghost btn-small" onclick="clearAll()">Löschen</button>
       </div>
     </div>
     <div class="history-detail-bar" id="historyDetailBar" style="display:none">
@@ -357,7 +357,9 @@ async function doStartRun(toRun,origIdx){
   const maxTurns=parseInt($("maxTurns").value)||30,silence=parseInt($("silenceTime").value)||2000;
   if(!apiKey||!doc||!pat){alert("Bitte API Key und Agent IDs eingeben.");return}
   if(!toRun.length){alert("Keine Szenarien.");return}
-  saveConfig();clearTranscript();switchTab("transcript",document.querySelectorAll(".tab")[0]);
+  saveConfig();
+  if(systemLog.length)addSystemLog("─────────────────────────────────────");
+  clearTranscript();switchTab("transcript",document.querySelectorAll(".tab")[0]);
   scenarioIndexMap=origIdx;
 
   const globalBase=getBasePrompt();
@@ -440,7 +442,8 @@ function markSc(i,state){
   else if(state==="skipped")c.classList.add("scenario-skipped");
 }
 
-function clearTranscript(){tv().innerHTML="";$("logView").innerHTML="";transcriptLog=[];systemLog=[];viewingHistoryRun=null;$("historyDetailBar").style.display="none";document.querySelectorAll(".scenario-card").forEach(c=>{c.classList.remove("active","scenario-done","scenario-loop","scenario-skipped");const d=c.querySelector(".scenario-running");if(d)d.remove()})}
+function clearTranscript(){tv().innerHTML="";transcriptLog=[];viewingHistoryRun=null;$("historyDetailBar").style.display="none";document.querySelectorAll(".scenario-card").forEach(c=>{c.classList.remove("active","scenario-done","scenario-loop","scenario-skipped");const d=c.querySelector(".scenario-running");if(d)d.remove()})}
+function clearAll(){clearTranscript();$("logView").innerHTML="";systemLog=[]}
 function switchTab(tab,btn){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));if(btn)btn.classList.add("active");$("transcriptView").classList.toggle("visible",tab==="transcript");$("logView").classList.toggle("visible",tab==="log");$("historyView").classList.toggle("visible",tab==="history");if(tab==="history")loadHistory()}
 
 // ─── History ────────────────────────────────
@@ -464,7 +467,7 @@ async function viewHistoryRun(runId){
     const reasons={patient_disconnected:"Patient hat aufgelegt",praxis_disconnected:"Praxis hat aufgelegt",max_turns:"Max Turns erreicht",timeout:"Timeout",loop_detected:"⟳ Loop erkannt",skipped:"⏭ Übersprungen"};
     const style=(sc.reason==="loop_detected"||sc.reason==="timeout"||sc.reason==="skipped")?"warn":"info";
     addSystemMessage(`${reasons[sc.reason]||sc.reason} (${sc.duration}s, ${sc.turnCount} Turns)`,style);}
-  $("logView").innerHTML="";systemLog=[];
+  addSystemLog(`── Historie: Run vom ${new Date(data.startedAt).toLocaleString("de-DE")} ──`);
   for(const e of(data.systemLog||[])){const d=document.createElement("div");d.className=`log-line ${e.type}`;d.textContent=`[${new Date(e.time).toLocaleTimeString("de-DE")}] ${e.text}`;$("logView").appendChild(d);systemLog.push(e)}}catch(err){alert("Fehler: "+err.message)}}
 
 function closeHistoryDetail(){viewingHistoryRun=null;$("historyDetailBar").style.display="none";tv().innerHTML="";transcriptLog=[];switchTab("history",document.querySelectorAll(".tab")[2])}

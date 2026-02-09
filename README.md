@@ -14,13 +14,13 @@ Server läuft auf `http://localhost:3000` (oder `PORT` env-Variable).
 ## Features
 
 - **Kein Node-RED nötig** — läuft standalone als Node.js Server
-- **Multi-User** — jeder Test-Run bekommt eine eigene ID, mehrere Nutzer können gleichzeitig testen
-- **Kein Login** — API Key wird nur im Browser-Session gespeichert und pro Request an den Server geschickt
 - **Live-Transcript** — SSE-Stream zeigt Konversation in Echtzeit
 - **Szenario-Management** — Szenarien erstellen, bearbeiten, löschen, importieren/exportieren als JSON
 - **Download** — Transcript als .txt herunterladen
 
 ## Szenario-JSON Format
+
+**Beispiel:**
 
 ```json
 [
@@ -30,7 +30,8 @@ Server läuft auf `http://localhost:3000` (oder `PORT` env-Variable).
   },
   {
     "name": "Rezeptbestellung",
-    "prompt": "Du bist Lisa Müller..."
+    "prompt": "Du bist Lisa Müller...",
+    "use_base_prompt": true|false
   }
 ]
 ```
@@ -42,20 +43,35 @@ Server läuft auf `http://localhost:3000` (oder `PORT` env-Variable).
 | API Key | ElevenLabs API Key (`xi-…`) |
 | Praxis-Agent ID | Agent-ID des Praxis-Bots |
 | Patient-Agent ID | Agent-ID des Test-Patienten (Prompt wird pro Szenario überschrieben) |
-| Region | `eu` oder `us` |
 | Max Turns | Maximale Gesprächsrunden pro Szenario |
 | Silence (ms) | Wartezeit bis eine Antwort als vollständig gilt |
+| Base Prompt (Patient) | Basisprompt für Patienten-Bot (kann mit `use_base_prompt` aktiviert werden) |
 
-## Deployment
+### Lokale Konfiguration
 
-Für Produktion empfohlen: hinter einem Reverse-Proxy (nginx/caddy) mit HTTPS.
+#### `config.local.json` 
+- enthält sensible Informationen wie API Key und Agent IDs
+  - **Nicht committen!** — bitte in `.gitignore` hinzufügen
 
-```bash
-PORT=8080 node server.js
+**Beispiel:**
+
+```json
+  {
+    "apiKey": "API-KEY_residency_eu",
+    "docAgentId": "agent_xy",
+    "patientAgentId": "agent_yz",
+    "maxTurns": 30,
+    "silenceTime": 2000
+  }  
 ```
 
-Oder mit PM2:
+#### `.gitignore`
 
-```bash
-pm2 start server.js --name agent-tester
+**Beispiel:**
+
+```
+.gitignore
+/node_modules
+config.local.json
+/data
 ```
