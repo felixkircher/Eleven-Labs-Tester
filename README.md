@@ -2,6 +2,8 @@
 
 Web-App zum automatisierten Testen von ElevenLabs Conversational AI Agents (Praxis-Bot ↔ Patient-Bot).
 
+**Ein genaues How-To ist unten bei [[Deployment]](#deployment).**
+
 ## Setup
 
 ```bash
@@ -75,3 +77,32 @@ Server läuft auf `http://localhost:3000` (oder `PORT` env-Variable).
 config.local.json
 /data
 ```
+### Deployment 
+
+1. **Repository klonen**
+   ```bash
+   git clone https://github.com/felixkircher/elevenlabs-tester.git
+   cd elevenlabs-tester
+   ```
+
+2. **Abhängigkeiten installieren**
+   ```bash
+   npm install
+   ```
+
+3. **Lokale Konfiguration erstellen**
+   ```bash
+   cp config.local.json.example config.local.json
+   ```
+   - **Fülle die Felder mit deinen API Keys und Agent IDs**
+
+4. **Git ignorieren**
+   ```bash
+   cp example.gitignore .gitignore
+   ```
+
+4. **Server starten**
+   ```bash
+   npm start
+   ```
+   - Server läuft auf `http://localhost:3000`
