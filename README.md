@@ -2,7 +2,7 @@
 
 Web-App zum automatisierten Testen von ElevenLabs Conversational AI Agents (Praxis-Bot ↔ Patient-Bot).
 
-**Ein genaues How-To ist unten bei [[Deployment]](#deployment).**
+**Ein genaues How-To ist unten bei [Deployment](#deployment).**
 
 ## Setup
 
