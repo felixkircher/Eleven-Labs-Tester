@@ -1,0 +1,7 @@
+{
+  "apiKey": "API-KEY_residency_eu",
+  "docAgentId": "agent_xy",
+  "patientAgentId": "agent_yz",
+  "maxTurns": 30,
+  "silenceTime": 2000
+}
