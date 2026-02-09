@@ -11,17 +11,31 @@ app.use(express.static(path.join(__dirname, "public")));
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// ─── Local Config File ──────────────────────────────────────────────
+const LOCAL_CFG = path.join(__dirname, "config.local.json");
+app.get("/api/local-config", (req, res) => {
+  try {
+    if (!fs.existsSync(LOCAL_CFG)) return res.status(404).json({ error: "Not found" });
+    const raw = JSON.parse(fs.readFileSync(LOCAL_CFG, "utf8"));
+    const cfg = {};
+    if (typeof raw.apiKey === "string") cfg.apiKey = raw.apiKey;
+    if (typeof raw.docAgentId === "string") cfg.docAgentId = raw.docAgentId;
+    if (typeof raw.patientAgentId === "string") cfg.patientAgentId = raw.patientAgentId;
+    if (raw.maxTurns !== undefined) cfg.maxTurns = raw.maxTurns;
+    if (raw.silenceTime !== undefined) cfg.silenceTime = raw.silenceTime;
+    res.json(cfg);
+  } catch (_) {
+    res.status(400).json({ error: "Invalid config" });
+  }
+});
+
 const activeRuns = new Map();
 const sseClients = new Map();
-
-// ─── Helpers ────────────────────────────────────────────────────────
 
 function broadcast(runId, event, data) {
   const clients = sseClients.get(runId);
   if (!clients) return;
-  for (const res of clients) {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  }
+  for (const res of clients) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 function cleanupRun(runId) {
@@ -35,10 +49,7 @@ function cleanupRun(runId) {
   }
   const clients = sseClients.get(runId);
   if (clients) {
-    for (const res of clients) {
-      res.write(`event: done\ndata: {}\n\n`);
-      res.end();
-    }
+    for (const res of clients) { res.write(`event: done\ndata: {}\n\n`); res.end(); }
     sseClients.delete(runId);
   }
 }
@@ -46,18 +57,11 @@ function cleanupRun(runId) {
 function saveRunToDisk(runId) {
   const run = activeRuns.get(runId);
   if (!run) return;
-  fs.writeFileSync(
-    path.join(DATA_DIR, `${runId}.json`),
-    JSON.stringify({
-      id: runId,
-      startedAt: run.startedAt,
-      completedAt: Date.now(),
-      docAgentId: run.docAgentId,
-      patientAgentId: run.patientAgentId,
-      scenarios: run.scenarioResults || [],
-      systemLog: run.systemLog || [],
-    }, null, 2)
-  );
+  fs.writeFileSync(path.join(DATA_DIR, `${runId}.json`), JSON.stringify({
+    id: runId, startedAt: run.startedAt, completedAt: Date.now(),
+    docAgentId: run.docAgentId, patientAgentId: run.patientAgentId,
+    scenarios: run.scenarioResults || [], systemLog: run.systemLog || [],
+  }, null, 2));
 }
 
 function addRunLog(runId, text, type = "system") {
@@ -68,26 +72,30 @@ function addRunLog(runId, text, type = "system") {
 
 // ─── Loop Detection ─────────────────────────────────────────────────
 
-function normalize(text) {
-  return text.toLowerCase().replace(/[^a-zäöüß0-9 ]/g, "").replace(/\s+/g, " ").trim();
-}
+function norm(t) { return t.toLowerCase().replace(/[^a-zäöüß0-9 ]/g, "").replace(/\s+/g, " ").trim(); }
 
 function detectLoop(transcript) {
   if (transcript.length < 3) return false;
-  const last3 = transcript.slice(-3).map(m => normalize(m.text));
-  // All 3 identical
-  if (last3[0] === last3[1] && last3[1] === last3[2]) return true;
-  // Check alternating pattern: A B A B A B (last 6 messages, 3 pairs)
+  // 1. Any 3 identical messages in a row (regardless of speaker)
+  const last3 = transcript.slice(-3).map(m => norm(m.text));
+  if (last3[0] === last3[1] && last3[1] === last3[2]) return "3_identical";
+  // 2. Per-agent: last 3 messages from same speaker identical
+  for (const speaker of ["PRAXIS", "PATIENT"]) {
+    const msgs = transcript.filter(m => m.speaker === speaker);
+    if (msgs.length >= 3) {
+      const last3agent = msgs.slice(-3).map(m => norm(m.text));
+      if (last3agent[0] === last3agent[1] && last3agent[1] === last3agent[2]) return `${speaker.toLowerCase()}_repeat`;
+    }
+  }
+  // 3. Ping-pong pattern (A-B repeated 3 times across 6 messages)
   if (transcript.length >= 6) {
-    const last6 = transcript.slice(-6).map(m => normalize(m.text));
-    const pairA = last6[0] === last6[2] && last6[2] === last6[4];
-    const pairB = last6[1] === last6[3] && last6[3] === last6[5];
-    if (pairA && pairB) return true;
+    const last6 = transcript.slice(-6).map(m => norm(m.text));
+    if (last6[0] === last6[2] && last6[2] === last6[4] && last6[1] === last6[3] && last6[3] === last6[5]) return "ping_pong";
   }
   return false;
 }
 
-// ─── SSE Endpoint ───────────────────────────────────────────────────
+// ─── SSE ────────────────────────────────────────────────────────────
 
 app.get("/api/stream/:runId", (req, res) => {
   const { runId } = req.params;
@@ -109,12 +117,7 @@ app.get("/api/runs", (req, res) => {
     const runs = files.map(f => {
       try {
         const d = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
-        return {
-          id: d.id, startedAt: d.startedAt, completedAt: d.completedAt,
-          docAgentId: d.docAgentId, patientAgentId: d.patientAgentId,
-          scenarioCount: d.scenarios?.length || 0,
-          scenarioNames: (d.scenarios || []).map(s => s.name),
-        };
+        return { id: d.id, startedAt: d.startedAt, completedAt: d.completedAt, docAgentId: d.docAgentId, patientAgentId: d.patientAgentId, scenarioCount: d.scenarios?.length || 0, scenarioNames: (d.scenarios || []).map(s => s.name) };
       } catch (_) { return null; }
     }).filter(Boolean).sort((a, b) => b.startedAt - a.startedAt);
     res.json(runs);
@@ -142,12 +145,21 @@ async function updatePatientPrompt(apiKey, patientId, prompt, baseUrl) {
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({ conversation_config: { agent: { prompt: { prompt } } } }),
   });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Patient update failed (${resp.status}): ${text}`);
-  }
+  if (!resp.ok) { const t = await resp.text(); throw new Error(`(${resp.status}): ${t}`); }
   return resp.json();
 }
+
+// ─── Skip Scenario ──────────────────────────────────────────────────
+
+app.post("/api/skip/:runId", (req, res) => {
+  const run = activeRuns.get(req.params.runId);
+  if (run && run.skipCurrent) {
+    run.skipCurrent();
+    res.json({ ok: true });
+  } else {
+    res.status(404).json({ error: "No active scenario to skip" });
+  }
+});
 
 // ─── Run a Single Scenario ──────────────────────────────────────────
 
@@ -156,116 +168,90 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
     const { apiKey, docAgentId, patientAgentId, maxTurns, silenceTime, baseUrl } = config;
     const wsBase = baseUrl.replace("https://", "wss://");
 
-    let turnCount = 0;
-    let docBuffer = "";
-    let patientBuffer = "";
-    let docTimer = null;
-    let patientTimer = null;
-    let transcript = [];
-    let resolved = false;
-    let scenarioStartTime = Date.now();
-    let loopWarnings = 0;
+    let turnCount = 0, docBuffer = "", patientBuffer = "";
+    let docTimer = null, patientTimer = null;
+    let transcript = [], resolved = false;
+    const t0 = Date.now();
 
     function done(reason) {
       if (resolved) return;
       resolved = true;
-      clearTimeout(safetyTimer);
-      clearTimeout(docTimer);
-      clearTimeout(patientTimer);
+      const run = activeRuns.get(runId);
+      if (run) run.skipCurrent = null;
+      clearTimeout(safetyTimer); clearTimeout(docTimer); clearTimeout(patientTimer);
       try { docWs.close(); } catch (_) {}
       try { patientWs.close(); } catch (_) {}
-      const duration = ((Date.now() - scenarioStartTime) / 1000).toFixed(1);
-      addRunLog(runId, `Szenario "${scenario.name}" beendet (${reason}) — ${duration}s, ${turnCount} Turns, ${transcript.length} Nachrichten`);
-      broadcast(runId, "scenario_end", { scenarioIndex, reason, transcript, duration, turnCount });
-      resolve({ name: scenario.name, prompt: scenario.prompt, transcript, reason, duration, turnCount });
+      const dur = ((Date.now() - t0) / 1000).toFixed(1);
+      addRunLog(runId, `Szenario "${scenario.name}" beendet (${reason}) — ${dur}s, ${turnCount} Turns, ${transcript.length} Nachrichten`);
+      broadcast(runId, "scenario_end", { scenarioIndex, reason, transcript, duration: dur, turnCount });
+      resolve({ name: scenario.name, prompt: scenario.prompt, transcript, reason, duration: dur, turnCount });
     }
 
+    // Register skip function
+    const run = activeRuns.get(runId);
+    if (run) run.skipCurrent = () => {
+      addRunLog(runId, `⏭ Szenario "${scenario.name}" manuell übersprungen`, "warn");
+      done("skipped");
+    };
+
     const safetyTimer = setTimeout(() => {
-      addRunLog(runId, `⏱ Szenario "${scenario.name}" Timeout nach 5 Minuten — wird übersprungen`, "warn");
+      addRunLog(runId, `⏱ Timeout nach 5min — Szenario wird übersprungen`, "warn");
       done("timeout");
     }, 5 * 60 * 1000);
 
     function checkForLoop() {
-      if (detectLoop(transcript)) {
-        loopWarnings++;
-        addRunLog(runId, `⚠ Loop erkannt (${loopWarnings}/1) — Gespräch wiederholt sich, Szenario wird beendet`, "warn");
-        broadcast(runId, "log", { type: "warn", text: `Loop erkannt: Letzte Nachrichten wiederholen sich — Szenario wird übersprungen` });
+      const loopType = detectLoop(transcript);
+      if (loopType) {
+        const labels = { "3_identical": "3 identische Nachrichten", "praxis_repeat": "Praxis wiederholt sich 3×", "patient_repeat": "Patient wiederholt sich 3×", "ping_pong": "Ping-Pong-Muster erkannt" };
+        addRunLog(runId, `⟳ Loop: ${labels[loopType] || loopType} — Szenario wird übersprungen`, "warn");
         done("loop_detected");
         return true;
       }
       return false;
     }
 
-    function connectAgent(agentId, label) {
-      addRunLog(runId, `${label}: Verbinde WebSocket…`);
-      const ws = new WebSocket(`${wsBase}/v1/convai/conversation?agent_id=${agentId}&xi-api-key=${apiKey}`);
-      ws.agentLabel = label;
-      return ws;
+    function sendMsg(text, ws) {
+      if (!text?.trim() || ws.readyState !== WebSocket.OPEN) return;
+      addRunLog(runId, `→ ${ws.agentLabel}: "${text.slice(0, 100)}${text.length > 100 ? "…" : ""}"`);
+      ws.send(JSON.stringify({ type: "user_message", text }));
     }
 
-    function sendUserMessage(text, targetWs) {
-      if (!text || !text.trim() || targetWs.readyState !== WebSocket.OPEN) return;
-      addRunLog(runId, `→ ${targetWs.agentLabel}: "${text.slice(0, 100)}${text.length > 100 ? "…" : ""}"`);
-      targetWs.send(JSON.stringify({ type: "user_message", text }));
-    }
+    const docWs = (() => { addRunLog(runId, `PRAXIS: Verbinde…`); const ws = new WebSocket(`${wsBase}/v1/convai/conversation?agent_id=${docAgentId}&xi-api-key=${apiKey}`); ws.agentLabel = "PRAXIS"; return ws; })();
+    const patientWs = (() => { addRunLog(runId, `PATIENT: Verbinde…`); const ws = new WebSocket(`${wsBase}/v1/convai/conversation?agent_id=${patientAgentId}&xi-api-key=${apiKey}`); ws.agentLabel = "PATIENT"; return ws; })();
 
-    const docWs = connectAgent(docAgentId, "PRAXIS");
-    const patientWs = connectAgent(patientAgentId, "PATIENT");
-
-    const run = activeRuns.get(runId);
     if (run) { run.docWs = docWs; run.patientWs = patientWs; }
 
-    let docReady = false;
-    let patientReady = false;
-
-    function checkBothReady() {
+    let docReady = false, patientReady = false;
+    function checkReady() {
       if (docReady && patientReady) {
-        addRunLog(runId, "Beide Agents verbunden ✓ — Praxis begrüßt zuerst…");
-        setTimeout(() => sendUserMessage("Start", docWs), 1500);
+        addRunLog(runId, "Beide verbunden ✓ — Praxis begrüßt zuerst…");
+        setTimeout(() => sendMsg("Start", docWs), 1500);
       }
     }
 
-    function setupAgent(ws) {
+    function setup(ws) {
       ws.on("open", () => {
         addRunLog(runId, `${ws.agentLabel}: Verbunden ✓`);
-        if (ws.agentLabel === "PRAXIS") docReady = true;
-        else patientReady = true;
-        checkBothReady();
+        if (ws.agentLabel === "PRAXIS") docReady = true; else patientReady = true;
+        checkReady();
       });
-
-      ws.on("error", (err) => {
-        addRunLog(runId, `${ws.agentLabel}: WebSocket Fehler — ${err.message}`, "error");
-        done("ws_error");
-      });
-
+      ws.on("error", (err) => { addRunLog(runId, `${ws.agentLabel}: Fehler — ${err.message}`, "error"); done("ws_error"); });
       ws.on("close", (code) => {
-        addRunLog(runId, `${ws.agentLabel}: WebSocket geschlossen (Code: ${code})`);
+        addRunLog(runId, `${ws.agentLabel}: Geschlossen (${code})`);
         if (ws.agentLabel === "PATIENT") {
           clearTimeout(patientTimer);
-          if (patientBuffer.trim()) {
-            const m = patientBuffer.trim(); patientBuffer = "";
-            transcript.push({ speaker: "PATIENT", text: m });
-            broadcast(runId, "message", { speaker: "PATIENT", text: m });
-          }
+          if (patientBuffer.trim()) { const m = patientBuffer.trim(); patientBuffer = ""; transcript.push({ speaker: "PATIENT", text: m }); broadcast(runId, "message", { speaker: "PATIENT", text: m }); }
           done("patient_disconnected");
-        } else if (ws.agentLabel === "PRAXIS") {
+        } else {
           clearTimeout(docTimer);
-          if (docBuffer.trim()) {
-            const m = docBuffer.trim(); docBuffer = "";
-            transcript.push({ speaker: "PRAXIS", text: m });
-            broadcast(runId, "message", { speaker: "PRAXIS", text: m });
-          }
+          if (docBuffer.trim()) { const m = docBuffer.trim(); docBuffer = ""; transcript.push({ speaker: "PRAXIS", text: m }); broadcast(runId, "message", { speaker: "PRAXIS", text: m }); }
           done("praxis_disconnected");
         }
       });
-
-      ws.on("message", (data) => {
+      ws.on("message", (raw) => {
         try {
-          const msg = JSON.parse(data.toString());
-          if (msg.type === "ping") {
-            ws.send(JSON.stringify({ type: "pong", event_id: msg.ping_event?.event_id }));
-            return;
-          }
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === "ping") { ws.send(JSON.stringify({ type: "pong", event_id: msg.ping_event?.event_id })); return; }
           if (msg.type === "agent_response" && msg.agent_response_event?.agent_response) {
             const txt = msg.agent_response_event.agent_response;
             if (ws.agentLabel === "PRAXIS") {
@@ -277,9 +263,9 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
                 transcript.push({ speaker: "PRAXIS", text: m });
                 broadcast(runId, "message", { speaker: "PRAXIS", text: m });
                 if (checkForLoop()) return;
-                sendUserMessage(m, patientWs);
+                sendMsg(m, patientWs);
               }, silenceTime);
-            } else if (ws.agentLabel === "PATIENT") {
+            } else {
               broadcast(runId, "token", { speaker: "PATIENT", text: txt });
               patientBuffer += txt + " ";
               clearTimeout(patientTimer);
@@ -290,7 +276,7 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
                 broadcast(runId, "message", { speaker: "PATIENT", text: m, turn: turnCount, maxTurns });
                 if (checkForLoop()) return;
                 if (turnCount >= maxTurns) { done("max_turns"); return; }
-                sendUserMessage(m, docWs);
+                sendMsg(m, docWs);
               }, silenceTime);
             }
           }
@@ -298,9 +284,7 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
       });
     }
 
-    setupAgent(docWs);
-    setupAgent(patientWs);
-
+    setup(docWs); setup(patientWs);
     broadcast(runId, "scenario_start", { scenarioIndex, totalScenarios, name: scenario.name, prompt: scenario.prompt });
   });
 }
@@ -308,44 +292,38 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
 // ─── Start Test Run ─────────────────────────────────────────────────
 
 app.post("/api/start", async (req, res) => {
-  const { apiKey, docAgentId, patientAgentId, scenarios, maxTurns = 30, silenceTime = 2000, scenarioIndices } = req.body;
-
-  if (!apiKey || !docAgentId || !patientAgentId || !scenarios?.length) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
+  const { apiKey, docAgentId, patientAgentId, scenarios, maxTurns = 30, silenceTime = 2000, scenarioIndices, basePrompt } = req.body;
+  if (!apiKey || !docAgentId || !patientAgentId || !scenarios?.length) return res.status(400).json({ error: "Missing required fields" });
 
   const baseUrl = "https://api.eu.residency.elevenlabs.io";
   const runId = uuidv4();
-
-  activeRuns.set(runId, {
-    status: "running", startedAt: Date.now(),
-    docAgentId, patientAgentId,
-    scenarioResults: [], systemLog: [],
-  });
-
+  activeRuns.set(runId, { status: "running", startedAt: Date.now(), docAgentId, patientAgentId, scenarioResults: [], systemLog: [] });
   res.json({ runId, scenarioIndices: scenarioIndices || scenarios.map((_, i) => i) });
 
   const config = { apiKey, docAgentId, patientAgentId, maxTurns, silenceTime, baseUrl };
 
   addRunLog(runId, `═══ Test Run gestartet ═══`);
   addRunLog(runId, `${scenarios.length} Szenario(s) | Max Turns: ${maxTurns} | Silence: ${silenceTime}ms`);
-  addRunLog(runId, `Praxis-Agent: ${docAgentId}`);
-  addRunLog(runId, `Patient-Agent: ${patientAgentId}`);
-  addRunLog(runId, `Loop-Erkennung: aktiv (3 gleiche Nachrichten oder Ping-Pong-Muster)`);
+  addRunLog(runId, `Praxis: ${docAgentId} | Patient: ${patientAgentId}`);
+  if (basePrompt) addRunLog(runId, `Base-Prompt aktiv (${basePrompt.length} Zeichen)`);
+  addRunLog(runId, `Loop-Erkennung: 3× identisch, per-Agent 3× Wiederholung, Ping-Pong`);
 
   const results = [];
-
   for (let i = 0; i < scenarios.length; i++) {
     const run = activeRuns.get(runId);
-    if (!run || run.status === "stopped") { addRunLog(runId, "Test manuell gestoppt.", "warn"); break; }
+    if (!run || run.status === "stopped") { addRunLog(runId, "Test gestoppt.", "warn"); break; }
 
-    const scenario = scenarios[i];
-    addRunLog(runId, `\n── Szenario ${i + 1}/${scenarios.length}: "${scenario.name}" ──`);
-    addRunLog(runId, `Prompt: "${scenario.prompt.slice(0, 150)}${scenario.prompt.length > 150 ? "…" : ""}"`);
+    const sc = scenarios[i];
+    addRunLog(runId, `\n── Szenario ${i + 1}/${scenarios.length}: "${sc.name}" ──`);
+
+    // Combine base prompt + scenario prompt (respect per-scenario flag)
+    const useBase = sc.use_base_prompt !== false && basePrompt;
+    const finalPrompt = useBase ? `${basePrompt}\n\n---\n\nSzenario:\n${sc.prompt}` : sc.prompt;
+    addRunLog(runId, `Base-Prompt: ${useBase ? "aktiv" : "deaktiviert"} | Prompt (${finalPrompt.length} Zeichen): "${finalPrompt.slice(0, 150)}…"`);
 
     try {
       addRunLog(runId, "Patient-Prompt aktualisieren…");
-      await updatePatientPrompt(apiKey, patientAgentId, scenario.prompt, baseUrl);
+      await updatePatientPrompt(apiKey, patientAgentId, finalPrompt, baseUrl);
       addRunLog(runId, "Patient-Prompt aktualisiert ✓");
       await new Promise(r => setTimeout(r, 1500));
     } catch (err) {
@@ -354,34 +332,26 @@ app.post("/api/start", async (req, res) => {
     }
 
     try {
-      const result = await runScenario(runId, config, scenario, i + 1, scenarios.length);
+      const result = await runScenario(runId, config, sc, i + 1, scenarios.length);
       results.push(result);
       const rd = activeRuns.get(runId);
       if (rd) rd.scenarioResults.push(result);
     } catch (err) {
-      addRunLog(runId, `Szenario fehlgeschlagen: ${err.message}`, "error");
+      addRunLog(runId, `Fehler: ${err.message}`, "error");
     }
 
-    if (i < scenarios.length - 1) {
-      addRunLog(runId, "Cooldown 2s…");
-      await new Promise(r => setTimeout(r, 2000));
-    }
+    if (i < scenarios.length - 1) { addRunLog(runId, "Cooldown 2s…"); await new Promise(r => setTimeout(r, 2000)); }
   }
 
-  addRunLog(runId, `\n═══ Test Run abgeschlossen ═══ ${results.length}/${scenarios.length} Szenarien durchlaufen`);
-
-  // Summary
   const looped = results.filter(r => r.reason === "loop_detected").length;
   const timedOut = results.filter(r => r.reason === "timeout").length;
+  const skipped = results.filter(r => r.reason === "skipped").length;
   const clean = results.filter(r => ["patient_disconnected", "praxis_disconnected"].includes(r.reason)).length;
-  addRunLog(runId, `Zusammenfassung: ${clean} sauber beendet, ${looped} Loops erkannt, ${timedOut} Timeouts`);
-
-  broadcast(runId, "run_complete", { totalScenarios: scenarios.length, completedScenarios: results.length, looped, timedOut, clean });
+  addRunLog(runId, `\n═══ Abgeschlossen ═══ ${results.length}/${activeRuns.get(runId)?.scenarioResults?.length || results.length} — ${clean} sauber, ${looped} Loops, ${timedOut} Timeouts, ${skipped} übersprungen`);
+  broadcast(runId, "run_complete", { totalScenarios: scenarios.length, completedScenarios: results.length, looped, timedOut, skipped, clean });
   saveRunToDisk(runId);
   cleanupRun(runId);
 });
-
-// ─── Stop ───────────────────────────────────────────────────────────
 
 app.post("/api/stop/:runId", (req, res) => {
   const run = activeRuns.get(req.params.runId);
