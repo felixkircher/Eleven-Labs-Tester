@@ -2,21 +2,82 @@
   "name": "elevenlabs-tester",
   "version": "1.0.0",
   "description": "A simple tester for ElevenLabs' LLM-API which allows you to test two AI-Agents against each other.",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
+    "electron": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
     "test": "echo \"TODO: Add tests\" && exit 1"
   },
-  "keywords": [
-    "elevenlabs",
-    "tester",
-    "AI",
-    "LLM-Testing"
-  ],
+  "keywords": ["elevenlabs", "tester", "AI", "LLM-Testing"],
   "author": "Felix Kircher & Claude",
   "license": "ISC",
   "dependencies": {
     "express": "^5.2.1",
     "uuid": "^13.0.0",
     "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "electron": "^latest",
+    "electron-builder": "^latest"
+  },
+  "build": {
+    "appId": "com.felixkircher.elevenlabs-tester",
+    "productName": "Agent Tester",
+
+    "files": [
+      "main.js",
+      "server-electron.js",
+      "package.json",
+      "node_modules/**/*",
+      "!data/**",
+      "!config.local.json",
+      "!*.md",
+      "!HowTo.md",
+      "!README.md",
+      "!example_config_local.json",
+      "!example.config.local.json",
+      "!.gitignore",
+      "!dist/**",
+      "!server.js"
+    ],
+
+    "extraResources": [
+      {
+        "from": "public",
+        "to": "public"
+      },
+      {
+        "from": "example_config_local.json",
+        "to": "config.local.json"
+      }
+    ],
+
+    "asar": true,
+
+    "directories": {
+      "output": "dist"
+    },
+
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/icon.png"
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -245,6 +245,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
           <div class="field"><label>Max Turns</label><input type="number" id="maxTurns" value="30" min="1" max="99"></div>
           <div class="field"><label>Silence (ms)</label><input type="number" id="silenceTime" value="2000" min="500" max="10000" step="500"></div>
         </div>
+        <!-- Nur in Electron-App sichtbar -->
+        <button class="btn btn-ghost btn-small" id="saveConfigBtn" onclick="saveConfigToFile()" style="display:none;width:100%;margin-top:2px" title="Konfiguration dauerhaft in der App speichern">💾 Konfiguration dauerhaft speichern</button>
       </div>
     </div>
 
@@ -401,7 +403,7 @@ npm start</div>
   "docAgentId": "agent_xy",
   "patientAgentId": "agent_yz",
   "maxTurns": 30,
-  "silenceTime": 2000
+  "silenceTime": 4000
 }</div>
           <div class="help-warn"><strong>⚠ Nicht committen!</strong> Diese Datei enthält sensible Daten. In <code style="font-family:var(--mono)">.gitignore</code> eintragen: <code style="font-family:var(--mono)">config.local.json</code> und <code style="font-family:var(--mono)">/data</code></div>
         </div>
@@ -416,7 +418,7 @@ npm start</div>
             <tr><td>Praxis-Agent ID</td><td>Agent-ID des echten Empfangsbots, der getestet werden soll.</td></tr>
             <tr><td>Patient-Agent ID</td><td>Agent-ID des simulierten Patienten-Bots. Der Prompt wird vor jedem Szenario automatisch überschrieben.</td></tr>
             <tr><td>Max Turns</td><td>Maximale Gesprächsrunden (Patient-Antworten) pro Szenario. Standard: 30.</td></tr>
-            <tr><td>Silence (ms)</td><td>Wartezeit in ms, nach der eine Agent-Antwort als vollständig gilt und weitergeleitet wird. Standard: 2000 ms.</td></tr>
+            <tr><td>Silence (ms)</td><td>Wartezeit in ms, nach der eine Agent-Antwort als vollständig gilt und weitergeleitet wird. Standard: 4000 ms.</td></tr>
           </table>
           <div class="help-tip"><strong>Tipp:</strong> Konfiguration aus <code style="font-family:var(--mono)">config.local.json</code> wird beim Seitenstart geladen. Browser-Eingaben überschreiben sie für die aktuelle Session.</div>
         </div>
@@ -506,6 +508,8 @@ npm start</div>
         <!-- RUN -->
         <div class="help-section" id="help-run">
           <h3>▶ Test ausführen</h3>
+          <div class="help-warn"><strong>⚠ Wichtig:</strong> Der Patienten-Agent-Prompt wird bei jedem Szenario <strong>dauerhaft</strong> in ElevenLabs überschrieben. Nach dem Test hat der Agent den Prompt des zuletzt ausgeführten Szenarios.</div>
+          <div class="help-warn"><strong>⚠ Wichtig:</strong> Es kann immer nur <strong>ein Szenario gleichzeitig</strong> in ElevenLabs getestet werden, da sonst die Gespräche mischen würden.</div>
           <h4>Alle / Auswahl testen</h4>
           <p>Klicke <span class="help-badge green">▶ Alle testen</span> oder <span class="help-badge green">▶ Auswahl testen (X)</span>. Der Server führt folgende Schritte pro Szenario aus:</p>
           <ul>
@@ -513,7 +517,7 @@ npm start</div>
             <li>Beide Agents per WebSocket verbinden</li>
             <li>Praxis begrüßt zuerst — Gespräch beginnt</li>
             <li>Nachrichten werden hin- und hergeleitet bis ein Abbruchkriterium greift</li>
-            <li>Transcript wird gespeichert, 2 Sekunden Cooldown, dann nächstes Szenario</li>
+            <li>Transcript wird gespeichert, 4 Sekunden Cooldown, dann nächstes Szenario <strong>(Hier empfele ich 4 Sekunden, wenn der Agent mit TTS läuft und auch "sprechen" kann)</strong></li>
           </ul>
           <h4>Einzelnes Szenario</h4>
           <p>Klicke auf <span class="help-badge">▶</span> im jeweiligen Card — läuft sofort, Checkbox wird ignoriert.</p>
@@ -521,7 +525,6 @@ npm start</div>
           <p>Während ein Test läuft, erscheint <span class="help-badge orange">⭭</span> — klicke ihn, um das aktuelle Szenario abzubrechen und zum nächsten zu springen. Das abgebrochene Szenario wird als <em>skipped</em> gespeichert.</p>
           <h4>Test stoppen</h4>
           <p><span class="help-badge red">■ Stopp</span> beendet den gesamten Testlauf sofort. Das laufende Szenario wird abgebrochen, der bisherige Transcript gespeichert.</p>
-          <div class="help-warn"><strong>⚠ Wichtig:</strong> Der Patienten-Agent-Prompt wird bei jedem Szenario <strong>dauerhaft</strong> in ElevenLabs überschrieben. Nach dem Test hat der Agent den Prompt des zuletzt ausgeführten Szenarios.</div>
         </div>
 
         <!-- END CRITERIA -->
@@ -571,7 +574,7 @@ npm start</div>
         <div class="help-section" id="help-tips">
           <h3>💡 Tipps &amp; Hinweise</h3>
           <ul>
-            <li><strong>Silence-Zeit erhöhen</strong> (z. B. 3000 ms), wenn Agents abgeschnitten werden oder Antworten unvollständig wirken</li>
+            <li><strong>Silence-Zeit erhöhen</strong> (z. B. 4000 ms), wenn Agents abgeschnitten werden oder Antworten unvollständig wirken</li>
             <li><strong>Max Turns senken</strong> (z. B. 10–15) für schnellere Testläufe bei einfachen Szenarien</li>
             <li><strong>Szenarien deselektieren</strong>, um nur bestimmte Fälle zu testen, ohne alle laufen zu lassen</li>
             <li><strong>Archiv nutzen</strong>, um Szenarien temporär aus dem Testlauf auszublenden, ohne sie zu verlieren</li>
@@ -759,7 +762,7 @@ function renderScenarios(){
       const checked = isSelected(s) ? "checked" : "";
       const deselCls = isSelected(s) ? "" : " deselected";
       const shieldStyle = s.use_base_prompt===false ? ' style="opacity:.75"' : '';
-      return `<div class="scenario-card${deselCls}" id="sc-${i}"${shieldStyle}>
+      return `<div class="scenario-card${deselCls}" id="sc-${i}"${shieldStyle} onclick="editScenario(${i})">
         <input type="checkbox" class="sc-checkbox" ${checked} onclick="event.stopPropagation();toggleScenario(${i})" title="Für Test auswählen">
         <div class="sc-name">${esc(s.name)}</div>
         <div class="sc-actions">
@@ -852,7 +855,7 @@ function getBasePrompt(){
 
 async function doStartRun(toRun, origIdx){
   const apiKey=$("apiKey").value.trim(),doc=$("docAgentId").value.trim(),pat=$("patientAgentId").value.trim();
-  const maxTurns=parseInt($("maxTurns").value)||30,silence=parseInt($("silenceTime").value)||2000;
+  const maxTurns=parseInt($("maxTurns").value)||30,silence=parseInt($("silenceTime").value)||4000;
   if(!apiKey||!doc||!pat){alert("Bitte API Key und Agent IDs eingeben.");return}
   if(!toRun.length){alert("Keine Szenarien ausgewählt.");return}
   saveConfig();
@@ -1028,11 +1031,66 @@ async function loadLocalConfig(){
   }catch(_){}
 }
 
+// ─── Electron-Funktionen ────────────────────────────────────────────────────
+let isElectronMode = false;
+
+async function checkElectronMode(){
+  try{
+    const r = await fetch("/api/mode");
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.electron){
+      isElectronMode = true;
+      // Save-Button einblenden
+      const btn = $("saveConfigBtn");
+      if(btn) btn.style.display = "block";
+    }
+  }catch(_){}
+}
+
+async function saveConfigToFile(){
+  const btn = $("saveConfigBtn");
+  try{
+    const payload = {
+      apiKey:$("apiKey").value.trim(),
+      docAgentId:$("docAgentId").value.trim(),
+      patientAgentId:$("patientAgentId").value.trim(),
+      maxTurns:parseInt($("maxTurns").value)||30,
+      silenceTime:parseInt($("silenceTime").value)||4000,
+    };
+    const r = await fetch("/api/save-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(r.ok){
+      if(btn){btn.textContent="✓ Gespeichert";setTimeout(()=>{btn.textContent="💾 Konfiguration dauerhaft speichern"},2000);}
+    } else {
+      alert("Fehler beim Speichern der Konfiguration.");
+    }
+  }catch(err){
+    alert("Fehler: "+err.message);
+  }
+}
+
+// Letzten abgeschlossenen Run beim Electron-Start automatisch anzeigen
+async function restoreLastSession(){
+  try{
+    const runs = await(await fetch("/api/runs")).json();
+    if(!runs.length) return;
+    const latest = runs[0]; // Neuester zuerst
+    // Nur laden wenn er innerhalb der letzten 24h war
+    if(Date.now() - latest.startedAt > 24*60*60*1000) return;
+    addSystemLog(`── Session wiederhergestellt: Run vom ${new Date(latest.startedAt).toLocaleString("de-DE")} ──`,"system");
+    await viewHistoryRun(latest.id);
+  }catch(_){}
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
 (async()=>{
+  await checkElectronMode();
   await loadLocalConfig();
   loadConfig();
   if(!$("basePrompt").value)$("basePrompt").value=DEFAULT_BASE_PROMPT;
   renderScenarios();
+  // Im Electron-Modus: letzten Run wiederherstellen
+  if(isElectronMode) await restoreLastSession();
 })();
 $("scenarioModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal()});
 $("helpModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeHelp()});
