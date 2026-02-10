@@ -81,8 +81,8 @@ config.local.json
 
 1. **Repository klonen**
    ```bash
-   git clone https://github.com/felixkircher/elevenlabs-tester.git
-   cd elevenlabs-tester
+   git clone https://github.com/felixkircher/Eleven-Labs-Tester.git
+   cd eleven-labs-tester
    ```
 
 2. **Abhängigkeiten installieren**
