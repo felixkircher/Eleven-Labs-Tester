@@ -21,6 +21,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}
 .status-pill.running .dot{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.5s ease-in-out infinite}
 .status-pill.running{color:var(--accent);border-color:var(--accent-dim)}
+.status-pill.mode-pill{color:var(--accent);border-color:var(--accent)}
+.status-pill.mode-pill .dot{background:var(--accent)}
+.status-pill.mode-pill.is-app{color:var(--blue);border-color:rgba(77,138,240,.35);background:var(--blue-dim)}
+.status-pill.mode-pill.is-app .dot{background:var(--blue);box-shadow:0 0 7px var(--blue)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* Sidebar */
@@ -231,6 +235,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
     <div style="display:flex;align-items:center;gap:10px">
       <button class="btn-help" onclick="openHelp()" title="Hilfe / How-To">Einführung</button>
       <div class="status-pill" id="statusPill"><div class="dot"></div><span id="statusText">Bereit</span></div>
+      <div class="status-pill mode-pill" id="modePill"><div class="dot"></div><span id="webOrAppText">Web</span></div>
     </div>
   </div>
 
@@ -1041,7 +1046,8 @@ async function checkElectronMode(){
     const d = await r.json();
     if(d.electron){
       isElectronMode = true;
-      // Save-Button einblenden
+      $("webOrAppText").textContent = "App";
+      $("modePill").classList.add("is-app");
       const btn = $("saveConfigBtn");
       if(btn) btn.style.display = "block";
     }
