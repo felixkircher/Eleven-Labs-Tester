@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Tester — ElevenLabs</title>
+<title>Agent Tester – ElevenLabs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
@@ -183,6 +183,42 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .modal h2{font-size:15px;font-weight:600}
 
 @media(max-width:768px){.app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}.sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:55vh}}
+
+/* ─── Help Modal ─────────────────────────────────────────── */
+.help-modal{width:720px;max-width:95vw;max-height:85vh;gap:0;padding:0;overflow:hidden}
+.help-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0}
+.help-modal-header h2{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.help-modal-body{display:flex;flex:1;overflow:hidden;min-height:0}
+.help-nav{width:170px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.help-nav-item{font-size:12px;font-weight:500;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--text-dim);transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:none;background:transparent;text-align:left;width:100%}
+.help-nav-item:hover{color:var(--text);background:var(--surface2)}
+.help-nav-item.active{color:var(--accent);background:var(--accent-glow)}
+.help-content{flex:1;overflow-y:auto;padding:22px 24px;min-width:0}
+.help-content::-webkit-scrollbar{width:5px}.help-content::-webkit-scrollbar-track{background:transparent}.help-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.help-section{display:none}.help-section.active{display:block}
+.help-section h3{font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text)}
+.help-section h4{font-size:12px;font-weight:600;margin:16px 0 6px;color:var(--text-dim)}
+.help-section p{font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:10px}
+.help-section p:last-child{margin-bottom:0}
+.help-section ul{padding-left:18px;margin-bottom:10px}
+.help-section ul li{font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:3px}
+.help-section ul li strong{color:var(--text)}
+.help-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+.help-table th{text-align:left;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);padding:5px 8px;border-bottom:1px solid var(--border)}
+.help-table td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text-dim);vertical-align:top;line-height:1.5}
+.help-table td:first-child{font-family:var(--mono);font-size:11px;white-space:nowrap;color:var(--text);padding-right:14px}
+.help-table tr:last-child td{border-bottom:none}
+.help-code{font-family:var(--mono);font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:8px 0 12px;color:var(--text);line-height:1.6;overflow-x:auto;white-space:pre}
+.help-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:4px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);margin:0 2px;vertical-align:middle}
+.help-badge.green{background:var(--accent-glow);border-color:var(--accent-dim);color:var(--accent)}
+.help-badge.orange{background:var(--orange-dim);border-color:rgba(240,160,48,.3);color:var(--orange)}
+.help-badge.red{background:var(--red-dim);border-color:rgba(240,72,88,.3);color:var(--red)}
+.help-tip{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:10px 12px;margin:10px 0;font-size:12px;color:var(--text-dim);line-height:1.6}
+.help-tip strong{color:var(--accent)}
+.help-warn{background:var(--orange-dim);border:1px solid rgba(240,160,48,.3);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin:10px 0;font-size:12px;color:var(--text-dim);line-height:1.6}
+.help-warn strong{color:var(--orange)}
+.btn-help{font-family:var(--mono);font-size:12px;font-weight:600;padding:6px 14px;border-radius:22px;background:var(--accent);border:1px solid var(--accent-dim);color:var(--bg);display:flex;align-items:center;gap:8px;box-shadow:0 0 0 2px var(--accent-glow),0 6px 14px rgba(34,214,122,.15)}
+.btn-help:hover{background:#2be888;border-color:var(--accent-dim);color:var(--bg);box-shadow:0 0 0 3px var(--accent-glow),0 8px 18px rgba(34,214,122,.25);transform:translateY(-1px)}
 </style>
 </head>
 <body>
@@ -192,7 +228,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
       <div class="logo">XI</div>
       <h1>Agent Tester <span>ElevenLabs ConvAI</span></h1>
     </div>
-    <div class="status-pill" id="statusPill"><div class="dot"></div><span id="statusText">Bereit</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn-help" onclick="openHelp()" title="Hilfe / How-To">Einführung</button>
+      <div class="status-pill" id="statusPill"><div class="dot"></div><span id="statusText">Bereit</span></div>
+    </div>
   </div>
 
   <div class="sidebar">
@@ -314,6 +353,240 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   </div>
 </div>
 <input type="file" id="fileImport" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<!-- ─── Help Modal ─────────────────────────────────────────── -->
+<div class="modal-backdrop" id="helpModal">
+  <div class="modal help-modal">
+    <div class="help-modal-header">
+      <h2>📖 How-To &amp; Dokumentation</h2>
+      <button class="btn btn-ghost btn-small" onclick="closeHelp()">✕ Schließen</button>
+    </div>
+    <div class="help-modal-body">
+      <!-- Nav -->
+      <div class="help-nav">
+        <button class="help-nav-item active" onclick="showHelp('setup',this)">🚀 Setup</button>
+        <button class="help-nav-item" onclick="showHelp('config',this)">⚙ Konfiguration</button>
+        <button class="help-nav-item" onclick="showHelp('baseprompt',this)">📋 Base-Prompt</button>
+        <button class="help-nav-item" onclick="showHelp('scenarios',this)">🧪 Szenarien</button>
+        <button class="help-nav-item" onclick="showHelp('selection',this)">☑ Auswahl</button>
+        <button class="help-nav-item" onclick="showHelp('archive',this)">⊟ Archiv</button>
+        <button class="help-nav-item" onclick="showHelp('run',this)">▶ Test starten</button>
+        <button class="help-nav-item" onclick="showHelp('endcriteria',this)">⛔ Abbruch</button>
+        <button class="help-nav-item" onclick="showHelp('results',this)">📊 Ergebnisse</button>
+        <button class="help-nav-item" onclick="showHelp('tips',this)">💡 Tipps</button>
+      </div>
+      <!-- Content -->
+      <div class="help-content">
+
+        <!-- SETUP -->
+        <div class="help-section active" id="help-setup">
+          <h3>🚀 Setup &amp; Installation</h3>
+          <p>Der Agent Tester läuft als eigenständiger Node.js-Server — kein Node-RED, kein externes Backend nötig.</p>
+          <h4>Voraussetzungen</h4>
+          <ul>
+            <li><strong>Node.js ≥ 18</strong></li>
+            <li>ElevenLabs-Account mit zwei konfigurierten Conversational AI Agents</li>
+            <li>API Key (<code style="font-family:var(--mono);color:var(--accent)">xi-…</code>) aus dem ElevenLabs-Dashboard</li>
+          </ul>
+          <h4>Starten</h4>
+          <div class="help-code">git clone https://github.com/felixkircher/elevenlabs-tester.git
+cd elevenlabs-tester
+npm install
+npm start</div>
+          <p>Der Server läuft dann auf <strong>http://localhost:3000</strong>. Der Port kann über die Umgebungsvariable <code style="font-family:var(--mono);color:var(--accent)">PORT</code> geändert werden.</p>
+          <h4>Optionale Vorkonfiguration</h4>
+          <p>Erstelle eine <code style="font-family:var(--mono);color:var(--accent)">config.local.json</code> im Projektordner, damit API Key und Agent-IDs beim Neustart automatisch geladen werden:</p>
+          <div class="help-code">{
+  "apiKey": "xi-…",
+  "docAgentId": "agent_xy",
+  "patientAgentId": "agent_yz",
+  "maxTurns": 30,
+  "silenceTime": 2000
+}</div>
+          <div class="help-warn"><strong>⚠ Nicht committen!</strong> Diese Datei enthält sensible Daten. In <code style="font-family:var(--mono)">.gitignore</code> eintragen: <code style="font-family:var(--mono)">config.local.json</code> und <code style="font-family:var(--mono)">/data</code></div>
+        </div>
+
+        <!-- CONFIG -->
+        <div class="help-section" id="help-config">
+          <h3>⚙ Konfigurationsfelder</h3>
+          <p>Die Felder in der linken Sidebar steuern, wie der Testlauf abläuft.</p>
+          <table class="help-table">
+            <tr><th>Feld</th><th>Beschreibung</th></tr>
+            <tr><td>API Key</td><td>ElevenLabs API Key (<code style="font-family:var(--mono)">xi-…</code>). Wird nur im sessionStorage des Browsers gespeichert.</td></tr>
+            <tr><td>Praxis-Agent ID</td><td>Agent-ID des echten Empfangsbots, der getestet werden soll.</td></tr>
+            <tr><td>Patient-Agent ID</td><td>Agent-ID des simulierten Patienten-Bots. Der Prompt wird vor jedem Szenario automatisch überschrieben.</td></tr>
+            <tr><td>Max Turns</td><td>Maximale Gesprächsrunden (Patient-Antworten) pro Szenario. Standard: 30.</td></tr>
+            <tr><td>Silence (ms)</td><td>Wartezeit in ms, nach der eine Agent-Antwort als vollständig gilt und weitergeleitet wird. Standard: 2000 ms.</td></tr>
+          </table>
+          <div class="help-tip"><strong>Tipp:</strong> Konfiguration aus <code style="font-family:var(--mono)">config.local.json</code> wird beim Seitenstart geladen. Browser-Eingaben überschreiben sie für die aktuelle Session.</div>
+        </div>
+
+        <!-- BASE PROMPT -->
+        <div class="help-section" id="help-baseprompt">
+          <h3>📋 Base-Prompt (Patient)</h3>
+          <p>Der Base-Prompt enthält allgemeine Verhaltensregeln, die für <em>alle</em> Szenarien gelten — z. B. natürlich sprechen, Infos erst auf Nachfrage nennen, Gespräch korrekt beenden.</p>
+          <h4>Funktionsweise</h4>
+          <ul>
+            <li>Der <strong>Toggle</strong> oben rechts aktiviert/deaktiviert den Base-Prompt global für alle Szenarien</li>
+            <li>Pro Szenario kann er mit <code style="font-family:var(--mono);color:var(--accent)">use_base_prompt: false</code> individuell abgeschaltet werden</li>
+            <li>Der finale Prompt an den Agenten lautet: <span class="help-badge">Base-Prompt</span> + <span class="help-badge">---</span> + <span class="help-badge">Szenario: [Prompt]</span></li>
+          </ul>
+          <h4>Wann deaktivieren?</h4>
+          <p>Für Off-Topic- oder Robustheitstests (z. B. „Frag nach Gehalt", „Datenschutz-Angriff") macht es oft Sinn, den Base-Prompt abzuschalten — der Agent soll dann ungelenkt agieren.</p>
+          <div class="help-tip"><strong>Tipp:</strong> Szenarien mit deaktiviertem Base-Prompt erscheinen leicht transparent in der Liste als visueller Hinweis.</div>
+        </div>
+
+        <!-- SCENARIOS -->
+        <div class="help-section" id="help-scenarios">
+          <h3>🧪 Szenarien verwalten</h3>
+          <h4>Neues Szenario anlegen</h4>
+          <p>Klicke auf <span class="help-badge">+</span> oben rechts in der Szenarienliste. Felder:</p>
+          <ul>
+            <li><strong>Name</strong> — Anzeigename (z. B. <em>01 · Neupatient – Terminvereinbarung</em>)</li>
+            <li><strong>Patienten-Prompt</strong> — Welche Rolle soll der Patient-Bot übernehmen? Persönlichkeit, Anliegen, Verhalten.</li>
+            <li><strong>Base-Prompt verwenden</strong> — Toggle, ob der globale Base-Prompt für dieses Szenario aktiv ist.</li>
+          </ul>
+          <h4>Szenario bearbeiten</h4>
+          <p>Klicke auf den Card-Text (nicht auf einen der Buttons) — das Bearbeitungs-Modal öffnet sich.</p>
+          <h4>Import / Export</h4>
+          <p><span class="help-badge">↑</span> importiert eine <code style="font-family:var(--mono)">.json</code>-Datei und <em>fügt</em> die Szenarien zur bestehenden Liste hinzu. <span class="help-badge">↓</span> exportiert alle aktiven (nicht archivierten) Szenarien.</p>
+          <p>JSON-Format:</p>
+          <div class="help-code">[
+  {
+    "name": "Terminvereinbarung",
+    "prompt": "Du bist Max Mustermann…"
+  },
+  {
+    "name": "Off-Topic Test",
+    "prompt": "Du fragst nach anderen Dingen…",
+    "use_base_prompt": false
+  }
+]</div>
+        </div>
+
+        <!-- SELECTION -->
+        <div class="help-section" id="help-selection">
+          <h3>☑ Szenarien auswählen</h3>
+          <p>Nicht immer sollen alle Szenarien in einem Testlauf ausgeführt werden. Die Checkbox-Auswahl ermöglicht das gezielte Testen einzelner Szenarien.</p>
+          <h4>Bedienung</h4>
+          <ul>
+            <li>Jeder aktive Szenario-Card hat eine <strong>Checkbox</strong> links — nur angehakte Szenarien laufen bei „▶ Alle testen"</li>
+            <li><span class="help-badge">☑</span> oben → alle auswählen</li>
+            <li><span class="help-badge">☐</span> oben → alle abwählen</li>
+          </ul>
+          <h4>Feedback</h4>
+          <ul>
+            <li>Das Badge <span class="help-badge orange">X / Y ausgewählt</span> erscheint, sobald die Auswahl unvollständig ist</li>
+            <li>Abgewählte Cards erscheinen transparent</li>
+            <li>Der Start-Button zeigt dynamisch: <span class="help-badge green">▶ Auswahl testen (X)</span> oder <span class="help-badge green">▶ Alle testen (X)</span></li>
+          </ul>
+          <div class="help-tip"><strong>Hinweis:</strong> Der <span class="help-badge">▶</span>-Button im Card startet ein einzelnes Szenario sofort — unabhängig von der Checkbox-Auswahl.</div>
+        </div>
+
+        <!-- ARCHIVE -->
+        <div class="help-section" id="help-archive">
+          <h3>⊟ Szenarien archivieren</h3>
+          <p>Szenarien, die aktuell nicht gebraucht werden, aber nicht gelöscht werden sollen, können archiviert werden.</p>
+          <h4>Archivieren</h4>
+          <p>Klicke auf <span class="help-badge">⊟</span> im Card → das Szenario verschwindet aus der aktiven Liste.</p>
+          <h4>Archiv anzeigen</h4>
+          <p>Am Ende der Szenarienliste erscheint <span class="help-badge">▶ Archiv (N)</span> — klicke darauf, um die archivierten Szenarien einzuklappen/aufzuklappen.</p>
+          <h4>Wiederherstellen &amp; Löschen</h4>
+          <ul>
+            <li><span class="help-badge">↩</span> stellt ein Szenario zurück in die aktive Liste</li>
+            <li><span class="help-badge red">×</span> löscht es endgültig</li>
+          </ul>
+          <h4>Was archivierte Szenarien nicht tun</h4>
+          <ul>
+            <li>Sie nehmen <strong>nicht</strong> an Testläufen teil (auch wenn „Alle testen" gewählt wird)</li>
+            <li>Sie werden beim JSON-Export <strong>nicht</strong> mitexportiert</li>
+          </ul>
+        </div>
+
+        <!-- RUN -->
+        <div class="help-section" id="help-run">
+          <h3>▶ Test ausführen</h3>
+          <h4>Alle / Auswahl testen</h4>
+          <p>Klicke <span class="help-badge green">▶ Alle testen</span> oder <span class="help-badge green">▶ Auswahl testen (X)</span>. Der Server führt folgende Schritte pro Szenario aus:</p>
+          <ul>
+            <li>Patienten-Agent-Prompt via ElevenLabs PATCH-API aktualisieren</li>
+            <li>Beide Agents per WebSocket verbinden</li>
+            <li>Praxis begrüßt zuerst — Gespräch beginnt</li>
+            <li>Nachrichten werden hin- und hergeleitet bis ein Abbruchkriterium greift</li>
+            <li>Transcript wird gespeichert, 2 Sekunden Cooldown, dann nächstes Szenario</li>
+          </ul>
+          <h4>Einzelnes Szenario</h4>
+          <p>Klicke auf <span class="help-badge">▶</span> im jeweiligen Card — läuft sofort, Checkbox wird ignoriert.</p>
+          <h4>Szenario überspringen</h4>
+          <p>Während ein Test läuft, erscheint <span class="help-badge orange">⭭</span> — klicke ihn, um das aktuelle Szenario abzubrechen und zum nächsten zu springen. Das abgebrochene Szenario wird als <em>skipped</em> gespeichert.</p>
+          <h4>Test stoppen</h4>
+          <p><span class="help-badge red">■ Stopp</span> beendet den gesamten Testlauf sofort. Das laufende Szenario wird abgebrochen, der bisherige Transcript gespeichert.</p>
+          <div class="help-warn"><strong>⚠ Wichtig:</strong> Der Patienten-Agent-Prompt wird bei jedem Szenario <strong>dauerhaft</strong> in ElevenLabs überschrieben. Nach dem Test hat der Agent den Prompt des zuletzt ausgeführten Szenarios.</div>
+        </div>
+
+        <!-- END CRITERIA -->
+        <div class="help-section" id="help-endcriteria">
+          <h3>⛔ Abbruchkriterien</h3>
+          <p>Jedes Szenario endet automatisch, sobald eines dieser Kriterien erfüllt ist:</p>
+          <table class="help-table">
+            <tr><th>Grund</th><th>Bedeutung</th><th>Wertung</th></tr>
+            <tr><td>patient_disconnected</td><td>Patient hat aufgelegt (WebSocket geschlossen)</td><td><span class="help-badge green">✓ Normal</span></td></tr>
+            <tr><td>praxis_disconnected</td><td>Praxis hat aufgelegt (WebSocket geschlossen)</td><td><span class="help-badge green">✓ Normal</span></td></tr>
+            <tr><td>max_turns</td><td>Maximale Turnanzahl erreicht</td><td><span class="help-badge">Neutral</span></td></tr>
+            <tr><td>loop_detected</td><td>Loop erkannt — Agent wiederholt sich zu oft</td><td><span class="help-badge orange">⚠ Warn</span></td></tr>
+            <tr><td>timeout</td><td>Szenario läuft &gt; 5 Minuten ohne Ende</td><td><span class="help-badge orange">⚠ Warn</span></td></tr>
+            <tr><td>skipped</td><td>Manuell übersprungen via ⭭</td><td><span class="help-badge orange">⚠ Warn</span></td></tr>
+            <tr><td>ws_error</td><td>WebSocket-Verbindungsfehler</td><td><span class="help-badge red">✗ Fehler</span></td></tr>
+          </table>
+          <h4>Loop-Erkennung</h4>
+          <p>Der Server erkennt drei Muster automatisch:</p>
+          <ul>
+            <li><strong>3× identisch</strong> — drei aufeinanderfolgende Nachrichten (beliebiger Sprecher) sind gleich</li>
+            <li><strong>Per-Agent-Wiederholung</strong> — ein Agent wiederholt seine letzten 3 eigenen Nachrichten</li>
+            <li><strong>Ping-Pong</strong> — das Muster A–B wiederholt sich 3× in den letzten 6 Nachrichten</li>
+          </ul>
+          <div class="help-tip"><strong>Tipp:</strong> Loops deuten oft auf zu kurze Silence-Zeit oder auf einen schlecht konfigurierten Agenten hin.</div>
+        </div>
+
+        <!-- RESULTS -->
+        <div class="help-section" id="help-results">
+          <h3>📊 Transcript, Log &amp; Historie</h3>
+          <h4>Transcript-Tab</h4>
+          <p>Live-Ansicht des Gesprächs. <span style="color:var(--praxis-color)">Praxis-Nachrichten</span> erscheinen links, <span style="color:var(--patient-color)">Patienten-Nachrichten</span> rechts. Systemnachrichten (Szenario-Ende, Ergebnis) erscheinen zentriert.</p>
+          <h4>System Log-Tab</h4>
+          <p>Technisches Log: Verbindungsaufbau, Prompt-Updates, Loop-Erkennungen, Fehler — mit Zeitstempel.</p>
+          <h4>Historie-Tab</h4>
+          <p>Alle abgeschlossenen Test-Runs werden automatisch unter <code style="font-family:var(--mono)">/data/</code> gespeichert.</p>
+          <ul>
+            <li>Klicke auf einen Run → vollständiger Transcript wird angezeigt</li>
+            <li><span class="help-badge">⬇</span> exportiert den Run als <code style="font-family:var(--mono)">.txt</code>-Datei</li>
+            <li><span class="help-badge red">×</span> löscht den Run</li>
+            <li><span class="help-badge">← Zurück</span> kehrt zur Historie-Liste zurück</li>
+          </ul>
+          <h4>Export</h4>
+          <p><span class="help-badge">⬇ Export</span> oben rechts in der Toolbar exportiert den aktuell sichtbaren Transcript (oder den gerade betrachteten historischen Run).</p>
+        </div>
+
+        <!-- TIPS -->
+        <div class="help-section" id="help-tips">
+          <h3>💡 Tipps &amp; Hinweise</h3>
+          <ul>
+            <li><strong>Silence-Zeit erhöhen</strong> (z. B. 3000 ms), wenn Agents abgeschnitten werden oder Antworten unvollständig wirken</li>
+            <li><strong>Max Turns senken</strong> (z. B. 10–15) für schnellere Testläufe bei einfachen Szenarien</li>
+            <li><strong>Szenarien deselektieren</strong>, um nur bestimmte Fälle zu testen, ohne alle laufen zu lassen</li>
+            <li><strong>Archiv nutzen</strong>, um Szenarien temporär aus dem Testlauf auszublenden, ohne sie zu verlieren</li>
+            <li><strong>Off-Topic-Szenarien</strong> (🛡) mit <code style="font-family:var(--mono);color:var(--accent)">use_base_prompt: false</code> markieren, damit der Patienten-Bot ungelenkt reagiert</li>
+            <li><strong>Loop-Erkennungen</strong> als Warnsignal: Sie deuten oft auf Konfigurationsprobleme beim Agent hin</li>
+            <li>Zwischen Szenarien wartet der Server automatisch <strong>2 Sekunden</strong> Cooldown, damit die Agent-Konfiguration übernommen wird</li>
+          </ul>
+          <div class="help-tip"><strong>Datenschutz:</strong> Der API Key wird nur im <code style="font-family:var(--mono)">sessionStorage</code> des Browsers gespeichert und verlässt das Gerät nur in Richtung ElevenLabs-API. Die <code style="font-family:var(--mono)">config.local.json</code> wird serverseitig gelesen — der API Key erscheint nicht im HTML-Quellcode.</div>
+          <div class="help-warn"><strong>⚠ Agent-Prompt:</strong> Der Patienten-Agent-Prompt wird dauerhaft in ElevenLabs überschrieben, nicht nur temporär. Nach einem Testlauf hat der Agent den Prompt des zuletzt getesteten Szenarios.</div>
+        </div>
+
+      </div><!-- /help-content -->
+    </div><!-- /help-modal-body -->
+  </div>
+</div>
 
 <script>
 const DEFAULT_BASE_PROMPT = `Du simulierst einen Patienten, der in einer Arztpraxis anruft. Wichtige Regeln:
@@ -728,6 +1001,19 @@ function downloadCurrentLog(){
   const b=new Blob([lines.join("\n")],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`transcript_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.txt`;a.click();
 }
 
+// ─── Help Modal ──────────────────────────────────────────────────────
+function openHelp(){ $("helpModal").classList.add("open"); }
+function closeHelp(){ $("helpModal").classList.remove("open"); }
+function showHelp(id, btn){
+  document.querySelectorAll(".help-section").forEach(s=>s.classList.remove("active"));
+  document.querySelectorAll(".help-nav-item").forEach(b=>b.classList.remove("active"));
+  const sec = $("help-"+id); if(sec){ sec.classList.add("active"); sec.scrollTop=0; }
+  if(btn) btn.classList.add("active");
+  // scroll content area to top
+  const content = document.querySelector(".help-content");
+  if(content) content.scrollTop = 0;
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────
 async function loadLocalConfig(){
   try{
@@ -749,7 +1035,8 @@ async function loadLocalConfig(){
   renderScenarios();
 })();
 $("scenarioModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal()});
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
+$("helpModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeHelp()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();closeHelp();}});
 </script>
 </body>
 </html>
