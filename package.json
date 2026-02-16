@@ -1,6 +1,6 @@
 {
   "name": "elevenlabs-tester",
-  "version": "1.0.1",
+  "version": "1.0.1-4",
   "description": "A simple tester for ElevenLabs' LLM-API which allows you to test two AI-Agents against each other.",
   "main": "main.js",
   "scripts": {
@@ -38,7 +38,6 @@
       "!*.md",
       "!HowTo.md",
       "!README.md",
-      "!example_config_local.json",
       "!example.config.local.json",
       "!.gitignore",
       "!dist/**",
@@ -51,7 +50,7 @@
         "to": "public"
       },
       {
-        "from": "example_config_local.json",
+        "from": "example.config.local.json",
         "to": "config.local.json"
       }
     ],

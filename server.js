@@ -24,16 +24,16 @@ app.get("/api/local-config", (req, res) => {
     if (raw.maxTurns !== undefined) cfg.maxTurns = raw.maxTurns;
     if (raw.silenceTime !== undefined) cfg.silenceTime = raw.silenceTime;
     res.json(cfg);
-  } catch (_) {
+} catch (_) {
     res.status(400).json({ error: "Invalid config" });
   }
-  
-  app.get("/api/version", (req, res) => {
+});
+
+app.get("/api/version", (req, res) => {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
     res.json({ version: pkg.version || "?" });
   } catch (_) { res.json({ version: "?" }); }
-});
 });
 
 const activeRuns = new Map();
