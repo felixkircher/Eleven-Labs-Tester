@@ -56,10 +56,30 @@ jobs:
       - name: Upload to Draft Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true          # ← Bleibt als Entwurf, wird NICHT automatisch veröffentlicht
+          draft: true
+          body: |
+            # New in this Release
+            -
+
+            # Running on macOS and Windows
+            Because **Agent Tester** is not yet code-signed, both macOS and Windows may show warnings when you try to run the app.
+
+            ## On macOS:
+            You'll need to remove the quarantine flag after installation:
+
+            `` xattr -dr com.apple.quarantine '/Applications/Agent Tester.app' ``
+
+            Without this step, macOS may report the app as "corrupted."
+
+            ## On Windows:
+            When launching the app, you may see a Windows Defender SmartScreen warning.
+
+            Click "More info" → "Run anyway" to continue.
+
+            ### Thanks to RapidRAW for the instructions to run :)
+            
           files: |
-            dist/**/*.exe
-            dist/**/*.dmg
-            dist/**/*.AppImage
+            dist/*Setup*.exe
+            dist/*arm64*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
