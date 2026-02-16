@@ -230,7 +230,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   <div class="header">
     <div class="header-left">
       <div class="logo">XI</div>
-      <h1>Agent Tester <span>ElevenLabs ConvAI</span></h1>
+        <h1>Agent Tester <span>ElevenLabs ConvAI</span> <span id="versionLabel" style="font-family:var(--mono);font-size:11px;color:var(--text-muted);font-weight:400;margin-left:4px"></span></h1>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <button class="btn-help" onclick="openHelp()" title="Hilfe / How-To">Einführung</button>
@@ -411,6 +411,7 @@ npm start</div>
   "silenceTime": 4000
 }</div>
           <div class="help-warn"><strong>⚠ Nicht committen!</strong> Diese Datei enthält sensible Daten. In <code style="font-family:var(--mono)">.gitignore</code> eintragen: <code style="font-family:var(--mono)">config.local.json</code> und <code style="font-family:var(--mono)">/data</code></div>
+          <div class="help-tip"><strong>Hinweis:</strong> Beispiel-Dateien liegen in git jeweils mit <code style="font-family:var(--mono)">example.<strong>&lt;Dateiname&gt;</strong></code> kopiert, wenn sie im Browser eingegeben werden.</div>
         </div>
 
         <!-- CONFIG -->
@@ -1097,6 +1098,7 @@ async function restoreLastSession(){
   renderScenarios();
   // Im Electron-Modus: letzten Run wiederherstellen
   if(isElectronMode) await restoreLastSession();
+  try { const vr = await fetch("/api/version"); const vd = await vr.json(); if(vd.version) $("versionLabel").textContent = `v${vd.version}`; } catch(_){}
 })();
 $("scenarioModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal()});
 $("helpModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeHelp()});
