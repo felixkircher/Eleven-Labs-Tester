@@ -1,0 +1,65 @@
+name: Build Electron App
+
+on:
+  push:
+    tags:
+      - "v*"          # Läuft bei Tags wie v1.1.1, v2.0.0 etc.
+
+permissions:
+  contents: write     # Nötig um Draft-Release zu erstellen / bearbeiten
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: dist/**/*.exe
+            name: Windows
+          - os: macos-latest
+            artifact: dist/**/*.dmg
+            name: macOS
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.name }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # macOS: Ohne Code-Signing baut electron-builder ein unsigned DMG.
+      # Für ein signiertes Binary müsstest du APPLE_ID etc. als Secrets hinterlegen.
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # CSC_IDENTITY_AUTO_DISCOVERY verhindert Fehler wenn kein Zertifikat da ist
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # Alle Binaries aus dist/ hochladen
+      - name: Upload to Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true          # ← Bleibt als Entwurf, wird NICHT automatisch veröffentlicht
+          files: |
+            dist/**/*.exe
+            dist/**/*.dmg
+            dist/**/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
