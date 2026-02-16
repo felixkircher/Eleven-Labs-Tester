@@ -96,6 +96,18 @@ app.get("/api/mode", (req, res) => {
   res.json({ electron: isElectron });
 });
 
+// ─── Version (aus package.json) ───────────────────────────────────────────────
+
+app.get("/api/version", (req, res) => {
+  try {
+    const pkgPath = isElectron
+      ? path.join(process.env.ELECTRON_RESOURCES || __dirname, "package.json")
+      : path.join(__dirname, "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    res.json({ version: pkg.version || "?" });
+  } catch (_) { res.json({ version: "?" }); }
+});
+
 // ─── Last-Session (Transcript-Persistenz für Electron) ───────────────────────
 
 app.get("/api/last-session", (req, res) => {
