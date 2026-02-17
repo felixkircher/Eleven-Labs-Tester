@@ -24,16 +24,27 @@ app.get("/api/local-config", (req, res) => {
     if (raw.maxTurns !== undefined) cfg.maxTurns = raw.maxTurns;
     if (raw.silenceTime !== undefined) cfg.silenceTime = raw.silenceTime;
     res.json(cfg);
-} catch (_) {
+  } catch (_) {
     res.status(400).json({ error: "Invalid config" });
   }
 });
 
-app.get("/api/version", (req, res) => {
+// ─── Agent Info (Name-Verifikation) ──────────────────────────────────────────
+app.get("/api/agent-info", async (req, res) => {
+  const { agentId, apiKey } = req.query;
+  if (!agentId || !apiKey) return res.status(400).json({ error: "Missing params" });
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-    res.json({ version: pkg.version || "?" });
-  } catch (_) { res.json({ version: "?" }); }
+    const baseUrl = "https://api.eu.residency.elevenlabs.io";
+    const resp = await fetch(`${baseUrl}/v1/convai/agents/${agentId}`, {
+      headers: { "xi-api-key": apiKey }
+    });
+    if (!resp.ok) return res.status(resp.status).json({ error: "Agent nicht gefunden" });
+    const data = await resp.json();
+    const name = data.name || data.agent_name || null;
+    res.json({ name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const activeRuns = new Map();

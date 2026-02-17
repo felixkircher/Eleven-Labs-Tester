@@ -1,6 +1,6 @@
 {
   "name": "elevenlabs-tester",
-  "version": "1.0.1-4",
+  "version": "1.0.2",
   "description": "A simple tester for ElevenLabs' LLM-API which allows you to test two AI-Agents against each other.",
   "main": "main.js",
   "scripts": {

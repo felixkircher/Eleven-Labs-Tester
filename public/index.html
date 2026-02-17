@@ -17,8 +17,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .logo{width:30px;height:30px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-family:var(--mono);font-weight:600;font-size:12px;color:var(--bg)}
 .header h1{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .header h1 span{color:var(--text-dim);font-weight:400;margin-left:6px;font-size:13px}
-.status-pill{font-family:var(--mono);font-size:11px;font-weight:500;padding:4px 12px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);display:flex;align-items:center;gap:6px}
-.status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}
+.status-pill{font-family:var(--mono);font-size:11px;font-weight:500;padding:4px 12px;border-radius:20px;border-color:var(--accent);background:var(--surface2);border:1px solid var(--border);color:var(--accent-dim);display:flex;align-items:center;gap:6px}
+.status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-dim)}
 .status-pill.running .dot{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.5s ease-in-out infinite}
 .status-pill.running{color:var(--accent);border-color:var(--accent-dim)}
 .status-pill.mode-pill{color:var(--accent);border-color:var(--accent)}
@@ -30,7 +30,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* Sidebar */
 .sidebar{background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
 .sidebar::-webkit-scrollbar{width:4px}.sidebar::-webkit-scrollbar-track{background:transparent}.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.section-title{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.section-title{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text);margin-bottom:8px}
 .field{display:flex;flex-direction:column;gap:4px}
 .field label{font-size:12px;font-weight:500;color:var(--text-dim)}
 .field input,.field select,.field textarea{font-family:var(--mono);font-size:12px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;transition:border-color .15s}
@@ -186,6 +186,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:500px;max-width:90vw;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
 .modal h2{font-size:15px;font-weight:600}
 
+/* Agent name badge */
+.agent-name-badge{font-family:var(--mono);font-size:10px;height:16px;margin-top:3px;padding:0 2px;display:flex;align-items:center;gap:5px;transition:all .2s}
+.agent-name-badge.loading{color:var(--text-muted)}
+.agent-name-badge.loading::before{content:"⟳";display:inline-block;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.agent-name-badge.ok{color:var(--accent)}
+.agent-name-badge.ok::before{content:"✓"}
+.agent-name-badge.err{color:var(--red)}
+.agent-name-badge.err::before{content:"✗"}
+
 @media(max-width:768px){.app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}.sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:55vh}}
 
 /* ─── Help Modal ─────────────────────────────────────────── */
@@ -244,8 +254,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
       <div class="section-title">⚙ Konfiguration</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <div class="field"><label>API Key</label><input type="password" id="apiKey" placeholder="xi-…" autocomplete="off"></div>
-        <div class="field"><label>Praxis-Agent ID</label><input type="text" id="docAgentId" placeholder="agent_…"></div>
-        <div class="field"><label>Patient-Agent ID</label><input type="text" id="patientAgentId" placeholder="agent_…"></div>
+        <div class="field"><label>Praxis-Agent ID</label><input type="text" id="docAgentId" placeholder="agent_…"><div id="docAgentName" class="agent-name-badge"></div></div>
+        <div class="field"><label>Patient-Agent ID <strong style="color:var(--orange);font-weight:500">(Wird bei jedem Szenario überschrieben!)</strong></label><input type="text" id="patientAgentId" placeholder="agent_…"><div id="patientAgentName" class="agent-name-badge"></div></div>
         <div class="row-2">
           <div class="field"><label>Max Turns</label><input type="number" id="maxTurns" value="30" min="1" max="99"></div>
           <div class="field"><label>Silence (ms)</label><input type="number" id="silenceTime" value="2000" min="500" max="10000" step="500"></div>
@@ -280,29 +290,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
           <!-- Select all / none -->
           <button class="btn btn-ghost btn-small" onclick="selectAllScenarios(true)" title="Alle auswählen" style="font-size:13px;padding:3px 6px">☑</button>
           <button class="btn btn-ghost btn-small" onclick="selectAllScenarios(false)" title="Alle abwählen" style="font-size:13px;padding:3px 6px">☐</button>
-          <div class="info-wrapper">
-            <span class="info-trigger" id="infoBtn" onclick="toggleInfo(event)">i</span>
-            <div class="info-popup" id="infoPopup">
-              <strong>Szenarien importieren</strong><br>
-              Erstelle eine <code>.json</code> Datei. Jedes Objekt braucht <code>name</code> und <code>prompt</code>.<br>
-              Optional: <code>use_base_prompt</code> (<code>true</code>/<code>false</code>) um den Base-Prompt pro Szenario zu steuern (Standard: <code>true</code>).
-              <pre>[
-  {
-    "name": "Terminvereinbarung",
-    "prompt": "Du bist Max…"
-  },
-  {
-    "name": "Off-Topic Test",
-    "prompt": "Du fragst nach…",
-    "use_base_prompt": false
-  }
-]</pre>
-              Klicke <strong>↑</strong> und wähle die Datei.
-            </div>
-          </div>
-          <button class="btn btn-ghost btn-small" onclick="importScenarios()" title="Import">↑</button>
-          <button class="btn btn-ghost btn-small" onclick="exportScenarios()" title="Export">↓</button>
-          <button class="btn btn-ghost btn-small" onclick="openNewScenarioModal()">+</button>
+          <button class="btn btn-ghost btn-small" onclick="importScenarios()" title="Import">↓</button>
+          <button class="btn btn-ghost btn-small" onclick="exportScenarios()" title="Export">↑</button>
+          <button class="btn btn-primary" onclick="openNewScenarioModal()" title="Neues Szenario">+</button>
         </div>
       </div>
 
@@ -388,6 +378,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
         <!-- SETUP -->
         <div class="help-section active" id="help-setup">
           <h3>🚀 Setup &amp; Installation</h3>
+          <div class="help-tip"><strong>Hinweis:</strong> Dieser Schritt ist nur bei lokaler Nutzung <strong>ohne die App</strong> wichtig. Ansonsten weiter mit dem nächsten Schritt.</div>
+          <div class="help-warn"><strong>Wichtig für Devs:</strong> Wenn andere Anwendungen den Port 3000 bereits verwenden, wird die App nicht korrekt starten. Bitte Port 3000 freihalten und App erneut starten.</div>
           <p>Der Agent Tester läuft als eigenständiger Node.js-Server — kein Node-RED, kein externes Backend nötig.</p>
           <h4>Voraussetzungen</h4>
           <ul>
@@ -648,9 +640,12 @@ function toggleInfo(e){
   e.stopPropagation();
   $("infoPopup").classList.toggle("open");
 }
+
+/*
 document.addEventListener("click",e=>{
   if(!e.target.closest(".info-wrapper"))$("infoPopup").classList.remove("open");
 });
+*/
 
 // ─── Config persistence ──────────────────────────────────────────────
 function saveConfig(){
@@ -1023,6 +1018,45 @@ function showHelp(id, btn){
   if(content) content.scrollTop = 0;
 }
 
+
+// ─── Agent Name Verification ──────────────────────────────────────────────────
+const agentNameCache = {};
+
+async function fetchAgentName(agentId, apiKey, badgeId) {
+  const badge = $(badgeId);
+  if (!badge) return;
+  if (!agentId || !apiKey) { badge.className = "agent-name-badge"; badge.textContent = ""; return; }
+  const cacheKey = `${apiKey}:${agentId}`;
+  if (agentNameCache[cacheKey]) {
+    const cached = agentNameCache[cacheKey];
+    badge.className = `agent-name-badge ${cached.ok ? "ok" : "err"}`;
+    badge.textContent = cached.text; return;
+  }
+  badge.className = "agent-name-badge loading"; badge.textContent = " Wird geladen…";
+  try {
+    const r = await fetch(`/api/agent-info?agentId=${encodeURIComponent(agentId)}&apiKey=${encodeURIComponent(apiKey)}`);
+    const d = await r.json();
+    if (r.ok && d.name) {
+      agentNameCache[cacheKey] = { ok: true, text: ` ${d.name}` };
+      badge.className = "agent-name-badge ok"; badge.textContent = ` ${d.name}`;
+    } else {
+      agentNameCache[cacheKey] = { ok: false, text: ` ${d.error || "Nicht gefunden"}` };
+      badge.className = "agent-name-badge err"; badge.textContent = ` ${d.error || "Nicht gefunden"}`;
+    }
+  } catch (e) { badge.className = "agent-name-badge err"; badge.textContent = " Server-Fehler"; }
+}
+
+function refreshAgentNames() {
+  const apiKey = $("apiKey").value.trim(), docId = $("docAgentId").value.trim(), patId = $("patientAgentId").value.trim();
+  fetchAgentName(docId, apiKey, "docAgentName");
+  fetchAgentName(patId, apiKey, "patientAgentName");
+}
+
+const debouncedAgentRefresh = debounce(refreshAgentNames, 800);
+["apiKey","docAgentId","patientAgentId"].forEach(id => {
+  $(id)?.addEventListener("input", () => { Object.keys(agentNameCache).forEach(k => delete agentNameCache[k]); debouncedAgentRefresh(); });
+});
+
 // ─── Init ─────────────────────────────────────────────────────────────
 async function loadLocalConfig(){
   try{
@@ -1098,6 +1132,7 @@ async function restoreLastSession(){
   renderScenarios();
   // Im Electron-Modus: letzten Run wiederherstellen
   if(isElectronMode) await restoreLastSession();
+  refreshAgentNames(); // Agent-Namen nach Config-Load anzeigen
   try { const vr = await fetch("/api/version"); const vd = await vr.json(); if(vd.version) $("versionLabel").textContent = `v${vd.version}`; } catch(_){}
 })();
 $("scenarioModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal()});

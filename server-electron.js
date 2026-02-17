@@ -90,6 +90,25 @@ app.post("/api/save-config", (req, res) => {
   }
 });
 
+// ─── Agent Info (Name-Verifikation) ──────────────────────────────────────────
+
+app.get("/api/agent-info", async (req, res) => {
+  const { agentId, apiKey } = req.query;
+  if (!agentId || !apiKey) return res.status(400).json({ error: "Missing params" });
+  try {
+    const baseUrl = "https://api.eu.residency.elevenlabs.io";
+    const resp = await fetch(`${baseUrl}/v1/convai/agents/${agentId}`, {
+      headers: { "xi-api-key": apiKey }
+    });
+    if (!resp.ok) return res.status(resp.status).json({ error: "Agent nicht gefunden" });
+    const data = await resp.json();
+    const name = data.name || data.agent_name || null;
+    res.json({ name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Modus-Flag (damit Frontend erkennt ob Electron) ─────────────────────────
 
 app.get("/api/mode", (req, res) => {

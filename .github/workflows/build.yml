@@ -60,25 +60,31 @@ jobs:
         with:
           draft: true
           body: |
-            # New in this Release
+            # Neu in dieser Version
             -
 
-            # Running on macOS and Windows
-            Because **Agent Tester** is not yet code-signed, both macOS and Windows may show warnings when you try to run the app.
+            # Hinweis: macOS und Windows
+            
+            Da **Agent Tester** noch nicht codesigned ist, zeigt macOS und Windows möglicherweise Warnungen beim Starten der App an.
 
-            ## On macOS:
-            You'll need to remove the quarantine flag after installation:
+            ## macOS:
 
-            `` xattr -dr com.apple.quarantine '/Applications/Agent Tester.app' ``
+            Nach der Installation musst du die App in den Einstellungen des Systems öffnen und den Schutz vor unbekannten Entwicklern deaktivieren und die App dann "Dennoch öffnen".
 
-            Without this step, macOS may report the app as "corrupted."
+            **Dazu gehe wie folgt vor:**
+            1. Öffne die Systemeinstellungen und navigiere zu **"Datenschutz & Sicherheit".**
+            2. Scrolle nach ganz unten bis du bei **"Sicherheit"** bist.
+            3. Bei **"Apps erlauben von"** wähle **"App Store & Bekannte Entwicklungsteams".**
+            4. Versuche die App zu öffnen und klicke bei dem PopUp **"Agent Tester.app" nicht geöffnet"** auf Fertig.
+            5. Jetzt kannst du in den Systemeinstellungen unter dem geänderten Punkt die App **"Dennoch öffnen"** und nun nutzen ;)
 
-            ## On Windows:
-            When launching the app, you may see a Windows Defender SmartScreen warning.
+            ## Windows:
 
-            Click "More info" → "Run anyway" to continue.
+            **Wenn du die App öffnest, kann es zu einem Windows Defender SmartScreen-Warnhinweis kommen.**
 
-            ### Thanks to RapidRAW for the instructions to run :)
+            **Klicke auf "Weitere Informationen" → "Noch einmal ausführen", um die App zu starten.**
+
+            ### **Thanks to RapidRAW for the instructions to run :)**
             
           files: |
             dist/*Setup*.exe
