@@ -49,8 +49,10 @@ jobs:
         run: npm run dist:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # CSC_IDENTITY_AUTO_DISCOVERY verhindert Fehler wenn kein Zertifikat da ist
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Wenn du vorher Auto-Discovery deaktiviert hast, ggf. entfernen:
+          # CSC_IDENTITY_AUTO_DISCOVERY: false
 
       # Alle Binaries aus dist/ hochladen
       - name: Upload to Draft Release

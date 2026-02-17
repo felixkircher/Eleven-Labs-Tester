@@ -4,12 +4,12 @@
   "description": "A simple tester for ElevenLabs' LLM-API which allows you to test two AI-Agents against each other.",
   "main": "main.js",
   "scripts": {
-    "start": "node server.js",
-    "electron": "electron .",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux",
+    "start": "npm install && node server.js",
+    "electron": "npm install && electron .",
+    "dist": "npm install && electron-builder",
+    "dist:win": "npm install && electron-builder --win",
+    "dist:mac": "npm install && electron-builder --mac",
+    "dist:linux": "npm install && electron-builder --linux",
     "test": "echo \"TODO: Add tests\" && exit 1"
   },
   "keywords": ["elevenlabs", "tester", "AI", "LLM-Testing"],
