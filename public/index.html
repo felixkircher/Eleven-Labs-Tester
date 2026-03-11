@@ -654,7 +654,7 @@ let scenarios = [...DEFAULT_SCENARIOS];
 let currentRunId = null, eventSource = null, editingScenarioIndex = null;
 let transcriptLog = [], systemLog = [], viewingHistoryRun = null, scenarioIndexMap = [];
 let archivedOpen = false;
-let progressTotal = 0;
+let progressTotal = 0, progressHideTimer = null;
 
 const SK = "xi_tester_cfg3"; // bumped key so old storage doesn't conflict
 function $(id){return document.getElementById(id)}
@@ -893,6 +893,7 @@ async function doStartRun(toRun, origIdx){
   const globalBase=getBasePrompt();
   const scenariosPayload=toRun.map(sc=>({name:sc.name,prompt:sc.prompt,use_base_prompt:sc.use_base_prompt!==false}));
 
+  requestNotificationPermission();
   try{
     const resp=await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,docAgentId:doc,patientAgentId:pat,scenarios:scenariosPayload,maxTurns,silenceTime:silence,scenarioIndices:origIdx,basePrompt:globalBase})});
     if(!resp.ok){const e=await resp.json();alert("Fehler: "+(e.error||resp.statusText));return}
@@ -917,6 +918,7 @@ async function stopTestRun(){
   if(!currentRunId)return;
   try{await fetch(`/api/stop/${currentRunId}`,{method:"POST"})}catch(_){}
   disconnectSSE();setRunningState(false);addSystemMessage("Test manuell gestoppt.","warn");
+  hideProgress(800);
 }
 
 function setRunningState(r){
@@ -924,7 +926,7 @@ function setRunningState(r){
   $("startBtn").style.display=r?"none":"flex";
   $("skipBtn").style.display=r?"flex":"none";
   $("stopBtn").style.display=r?"flex":"none";
-  if(!r){currentRunId=null;renderScenarios();hideProgress();} // refresh button label
+  if(!r){currentRunId=null;renderScenarios();}
 }
 
 // ─── Progress & Toasts ───────────────────────────────────────────────
@@ -932,6 +934,7 @@ function updateProgress(current, total, name, completed) {
   const wrap = $("progressBarWrap"), label = $("progressLabel");
   const scenario = $("progressScenario"), fill = $("progressFill");
   if (!wrap) return;
+  if (progressHideTimer) { clearTimeout(progressHideTimer); progressHideTimer = null; }
   wrap.classList.add("visible");
   label.textContent = `Szenario ${current} / ${total}`;
   if (name !== null) scenario.textContent = name;
@@ -939,13 +942,16 @@ function updateProgress(current, total, name, completed) {
   fill.style.width = pct + "%";
 }
 
-function hideProgress() {
-  const wrap = $("progressBarWrap");
-  if (wrap) {
-    const fill = $("progressFill");
-    if (fill) fill.style.width = "100%";
-    setTimeout(() => { wrap.classList.remove("visible"); if(fill) fill.style.width="0%"; }, 600);
-  }
+function hideProgress(delay = 600) {
+  if (progressHideTimer) clearTimeout(progressHideTimer);
+  const wrap = $("progressBarWrap"), fill = $("progressFill");
+  if (!wrap) return;
+  if (fill) fill.style.width = "100%";
+  progressHideTimer = setTimeout(() => {
+    wrap.classList.remove("visible");
+    if (fill) fill.style.width = "0%";
+    progressHideTimer = null;
+  }, delay);
 }
 
 function showToast(text, type = "success", duration = 5000) {
@@ -959,6 +965,52 @@ function showToast(text, type = "success", duration = 5000) {
     toast.style.animation = "toastOut .25s ease forwards";
     setTimeout(() => toast.remove(), 250);
   }, duration);
+}
+
+// ─── Sound ───────────────────────────────────────────────────────────
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (type === "success") {
+      // Aufsteigendes Dreiklang-Chime: C5 → E5 → G5
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.value = freq;
+        const t = ctx.currentTime + i * 0.18;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.28, t + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        osc.start(t); osc.stop(t + 0.5);
+      });
+    } else if (type === "warn") {
+      // Zwei absteigende Töne
+      [440, 330].forEach((freq, i) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.value = freq;
+        const t = ctx.currentTime + i * 0.22;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.22, t + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.start(t); osc.stop(t + 0.35);
+      });
+    }
+  } catch (_) {}
+}
+
+// ─── System Notifications ────────────────────────────────────────────
+async function requestNotificationPermission() {
+  if ("Notification" in window && Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+}
+
+function sendNotification(title, body, type) {
+  playSound(type);
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, { body, tag: type, silent: true });
+  }
 }
 
 // ─── SSE ─────────────────────────────────────────────────────────────
@@ -984,7 +1036,10 @@ function connectSSE(runId){
     const state=d.reason==="loop_detected"?"loop":d.reason==="skipped"?"skipped":"done";
     if(idx!==undefined)markSc(idx,state);
     updateProgress(d.scenarioIndex, progressTotal, null, d.scenarioIndex);
-    if(d.reason==="timeout") showToast(`⏱ Timeout – Szenario ${d.scenarioIndex} übersprungen`,"warn");
+    if(d.reason==="timeout"){
+      showToast(`⏱ Timeout – Szenario ${d.scenarioIndex} übersprungen`,"warn");
+      sendNotification("Agent Tester – Timeout", `⏱ Szenario ${d.scenarioIndex} wurde wegen Timeout übersprungen.`, "warn");
+    }
   });
   eventSource.addEventListener("run_complete",e=>{
     const d=JSON.parse(e.data);
@@ -994,9 +1049,13 @@ function connectSSE(runId){
     let toastMsg=`✓ Alle Tests abgeschlossen (${d.completedScenarios}/${d.totalScenarios})`;
     if(d.timedOut)toastMsg+=` · ${d.timedOut} Timeout(s)`;if(d.looped)toastMsg+=` · ${d.looped} Loop(s)`;
     showToast(toastMsg,"success",7000);
+    let notifBody=`${d.completedScenarios}/${d.totalScenarios} Szenarien abgeschlossen.`;
+    if(d.timedOut)notifBody+=` · ${d.timedOut} Timeout(s)`;if(d.looped)notifBody+=` · ${d.looped} Loop(s)`;if(d.skipped)notifBody+=` · ${d.skipped} übersprungen`;
+    sendNotification("Agent Tester – Fertig ✓", notifBody, "success");
     setRunningState(false);disconnectSSE();loadHistory();
+    hideProgress(60000);
   });
-  eventSource.addEventListener("done",()=>{disconnectSSE();setRunningState(false)});
+  eventSource.addEventListener("done",()=>{disconnectSSE();setRunningState(false);hideProgress(800)});
   eventSource.onerror=()=>addSystemLog("SSE Verbindung verloren","error");
 }
 function disconnectSSE(){if(eventSource){eventSource.close();eventSource=null}}
