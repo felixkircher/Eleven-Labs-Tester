@@ -198,6 +198,23 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
 @media(max-width:768px){.app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}.sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:55vh}}
 
+/* Progress Bar */
+.progress-bar-wrap{padding:8px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);display:none;flex-direction:column;gap:6px;flex-shrink:0}
+.progress-bar-wrap.visible{display:flex}
+.progress-info{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.progress-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0}
+.progress-scenario{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.progress-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .5s ease;box-shadow:0 0 6px var(--accent)}
+
+/* Toast notifications */
+.toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200;pointer-events:none}
+.toast{font-family:var(--mono);font-size:12px;font-weight:500;padding:11px 16px;border-radius:var(--radius);border:1px solid;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:toastIn .25s ease;pointer-events:auto;display:flex;align-items:center;gap:8px;max-width:340px;line-height:1.4}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(10px)}}
+.toast.success{background:var(--surface2);border-color:var(--accent-dim);color:var(--accent)}
+.toast.warn{background:var(--surface2);border-color:rgba(240,160,48,.35);color:var(--orange)}
+
 /* ─── Help Modal ─────────────────────────────────────────── */
 .help-modal{width:720px;max-width:95vw;max-height:85vh;gap:0;padding:0;overflow:hidden}
 .help-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -325,6 +342,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
         <button class="btn btn-ghost btn-small" onclick="clearAll()">Löschen</button>
       </div>
     </div>
+    <div class="progress-bar-wrap" id="progressBarWrap">
+      <div class="progress-info">
+        <span class="progress-label" id="progressLabel">Szenario 0 / 0</span>
+        <span class="progress-scenario" id="progressScenario"></span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
     <div class="history-detail-bar" id="historyDetailBar" style="display:none">
       <div><span class="hd-title" id="hdTitle"></span><span class="hd-meta" id="hdMeta"></span></div>
       <button class="btn btn-ghost btn-small" onclick="closeHistoryDetail()">← Zurück</button>
@@ -350,6 +374,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   </div>
 </div>
 <input type="file" id="fileImport" accept=".json" style="display:none" onchange="handleImport(event)">
+<div class="toast-container" id="toastContainer"></div>
 
 <!-- ─── Help Modal ─────────────────────────────────────────── -->
 <div class="modal-backdrop" id="helpModal">
@@ -629,6 +654,7 @@ let scenarios = [...DEFAULT_SCENARIOS];
 let currentRunId = null, eventSource = null, editingScenarioIndex = null;
 let transcriptLog = [], systemLog = [], viewingHistoryRun = null, scenarioIndexMap = [];
 let archivedOpen = false;
+let progressTotal = 0;
 
 const SK = "xi_tester_cfg3"; // bumped key so old storage doesn't conflict
 function $(id){return document.getElementById(id)}
@@ -898,13 +924,54 @@ function setRunningState(r){
   $("startBtn").style.display=r?"none":"flex";
   $("skipBtn").style.display=r?"flex":"none";
   $("stopBtn").style.display=r?"flex":"none";
-  if(!r){currentRunId=null;renderScenarios();} // refresh button label
+  if(!r){currentRunId=null;renderScenarios();hideProgress();} // refresh button label
+}
+
+// ─── Progress & Toasts ───────────────────────────────────────────────
+function updateProgress(current, total, name, completed) {
+  const wrap = $("progressBarWrap"), label = $("progressLabel");
+  const scenario = $("progressScenario"), fill = $("progressFill");
+  if (!wrap) return;
+  wrap.classList.add("visible");
+  label.textContent = `Szenario ${current} / ${total}`;
+  if (name !== null) scenario.textContent = name;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  fill.style.width = pct + "%";
+}
+
+function hideProgress() {
+  const wrap = $("progressBarWrap");
+  if (wrap) {
+    const fill = $("progressFill");
+    if (fill) fill.style.width = "100%";
+    setTimeout(() => { wrap.classList.remove("visible"); if(fill) fill.style.width="0%"; }, 600);
+  }
+}
+
+function showToast(text, type = "success", duration = 5000) {
+  const container = $("toastContainer");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = text;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toastOut .25s ease forwards";
+    setTimeout(() => toast.remove(), 250);
+  }, duration);
 }
 
 // ─── SSE ─────────────────────────────────────────────────────────────
 function connectSSE(runId){
   disconnectSSE();eventSource=new EventSource(`/api/stream/${runId}`);
-  eventSource.addEventListener("scenario_start",e=>{const d=JSON.parse(e.data);addScenarioHeader(d.scenarioIndex,d.totalScenarios,d.name);const idx=scenarioIndexMap[d.scenarioIndex-1];if(idx!==undefined)markSc(idx,"running")});
+  eventSource.addEventListener("scenario_start",e=>{
+    const d=JSON.parse(e.data);
+    addScenarioHeader(d.scenarioIndex,d.totalScenarios,d.name);
+    const idx=scenarioIndexMap[d.scenarioIndex-1];
+    if(idx!==undefined)markSc(idx,"running");
+    progressTotal=d.totalScenarios;
+    updateProgress(d.scenarioIndex, d.totalScenarios, d.name, d.scenarioIndex-1);
+  });
   eventSource.addEventListener("message",e=>{const d=JSON.parse(e.data);addChatMessage(d.speaker,d.text)});
   eventSource.addEventListener("log",e=>{const d=JSON.parse(e.data);addSystemLog(d.text,d.type)});
   eventSource.addEventListener("scenario_end",e=>{
@@ -916,12 +983,18 @@ function connectSSE(runId){
     const idx=scenarioIndexMap[d.scenarioIndex-1];
     const state=d.reason==="loop_detected"?"loop":d.reason==="skipped"?"skipped":"done";
     if(idx!==undefined)markSc(idx,state);
+    updateProgress(d.scenarioIndex, progressTotal, null, d.scenarioIndex);
+    if(d.reason==="timeout") showToast(`⏱ Timeout – Szenario ${d.scenarioIndex} übersprungen`,"warn");
   });
   eventSource.addEventListener("run_complete",e=>{
     const d=JSON.parse(e.data);
     let s=`✓ Abgeschlossen – ${d.completedScenarios}/${d.totalScenarios}`;
     if(d.looped)s+=` · ${d.looped} Loop(s)`;if(d.timedOut)s+=` · ${d.timedOut} Timeout(s)`;if(d.skipped)s+=` · ${d.skipped} übersprungen`;
-    addSystemMessage(s,"success");setRunningState(false);disconnectSSE();loadHistory();
+    addSystemMessage(s,"success");
+    let toastMsg=`✓ Alle Tests abgeschlossen (${d.completedScenarios}/${d.totalScenarios})`;
+    if(d.timedOut)toastMsg+=` · ${d.timedOut} Timeout(s)`;if(d.looped)toastMsg+=` · ${d.looped} Loop(s)`;
+    showToast(toastMsg,"success",7000);
+    setRunningState(false);disconnectSSE();loadHistory();
   });
   eventSource.addEventListener("done",()=>{disconnectSSE();setRunningState(false)});
   eventSource.onerror=()=>addSystemLog("SSE Verbindung verloren","error");
