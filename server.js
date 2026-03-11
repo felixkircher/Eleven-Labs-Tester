@@ -29,6 +29,14 @@ app.get("/api/local-config", (req, res) => {
   }
 });
 
+// ─── Version ────────────────────────────────────────────────────────
+app.get("/api/version", (_req, res) => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+    res.json({ version: pkg.version || "?" });
+  } catch (_) { res.json({ version: "?" }); }
+});
+
 // ─── Agent Info (Name-Verifikation) ──────────────────────────────────────────
 app.get("/api/agent-info", async (req, res) => {
   const { agentId, apiKey } = req.query;
@@ -59,11 +67,13 @@ function broadcast(runId, event, data) {
 function cleanupRun(runId) {
   const run = activeRuns.get(runId);
   if (run) {
-    if (run.docWs && run.docWs.readyState <= WebSocket.OPEN) run.docWs.close();
-    if (run.patientWs && run.patientWs.readyState <= WebSocket.OPEN) run.patientWs.close();
+    try { if (run.docWs?.readyState <= WebSocket.OPEN) run.docWs.close(); } catch (_) {}
+    try { if (run.patientWs?.readyState <= WebSocket.OPEN) run.patientWs.close(); } catch (_) {}
     clearTimeout(run.docTimer);
     clearTimeout(run.patientTimer);
     run.status = "completed";
+    // Remove from map after a delay so any in-flight callbacks can still resolve cleanly
+    setTimeout(() => activeRuns.delete(runId), 10000);
   }
   const clients = sseClients.get(runId);
   if (clients) {
@@ -77,7 +87,8 @@ function saveRunToDisk(runId) {
   if (!run) return;
   fs.writeFileSync(path.join(DATA_DIR, `${runId}.json`), JSON.stringify({
     id: runId, startedAt: run.startedAt, completedAt: Date.now(),
-    docAgentId: run.docAgentId, patientAgentId: run.patientAgentId,
+    docAgentId: run.docAgentId, docAgentName: run.docAgentName || null,
+    patientAgentId: run.patientAgentId,
     scenarios: run.scenarioResults || [], systemLog: run.systemLog || [],
   }, null, 2));
 }
@@ -242,8 +253,11 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
     let docReady = false, patientReady = false;
     function checkReady() {
       if (docReady && patientReady) {
-        addRunLog(runId, "Beide verbunden ✓ — Praxis begrüßt zuerst…");
-        setTimeout(() => sendMsg("Start", docWs), 1500);
+        addRunLog(runId, "Beide verbunden ✓ — Initialisiere Praxis mit 'Hallo'…");
+        setTimeout(() => {
+          broadcast(runId, "init", { text: "Hallo" });
+          sendMsg("Hallo", docWs);
+        }, 1500);
       }
     }
 
@@ -310,13 +324,28 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
 // ─── Start Test Run ─────────────────────────────────────────────────
 
 app.post("/api/start", async (req, res) => {
-  const { apiKey, docAgentId, patientAgentId, scenarios, maxTurns = 30, silenceTime = 2000, scenarioIndices, basePrompt } = req.body;
+  const { apiKey, docAgentId, patientAgentId, scenarios, maxTurns = 30, silenceTime = 2000, scenarioIndices, basePrompt, docAgentName } = req.body;
   if (!apiKey || !docAgentId || !patientAgentId || !scenarios?.length) return res.status(400).json({ error: "Missing required fields" });
+
+  // ── Stop any still-running runs to prevent duplicate WS connections at ElevenLabs ──
+  for (const [rid, r] of activeRuns) {
+    if (r.status === "running") {
+      console.log(`[cleanup] Stopping stale run ${rid} before new start`);
+      r.status = "stopped";
+      try { if (r.docWs?.readyState <= WebSocket.OPEN) r.docWs.close(); } catch (_) {}
+      try { if (r.patientWs?.readyState <= WebSocket.OPEN) r.patientWs.close(); } catch (_) {}
+      saveRunToDisk(rid);
+      cleanupRun(rid);
+    }
+  }
 
   const baseUrl = "https://api.eu.residency.elevenlabs.io";
   const runId = uuidv4();
-  activeRuns.set(runId, { status: "running", startedAt: Date.now(), docAgentId, patientAgentId, scenarioResults: [], systemLog: [] });
+  activeRuns.set(runId, { status: "running", startedAt: Date.now(), docAgentId, docAgentName: docAgentName || null, patientAgentId, scenarioResults: [], systemLog: [] });
   res.json({ runId, scenarioIndices: scenarioIndices || scenarios.map((_, i) => i) });
+
+  // Brief pause so ElevenLabs can fully close any previous connections
+  await new Promise(r => setTimeout(r, 1200));
 
   const config = { apiKey, docAgentId, patientAgentId, maxTurns, silenceTime, baseUrl };
 

@@ -85,6 +85,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .scenario-done .sc-name::before{content:"✓ ";color:var(--accent)}
 .scenario-loop .sc-name::before{content:"⟳ ";color:var(--orange)}
 .scenario-skipped .sc-name::before{content:"⭭ ";color:var(--text-muted)}
+.scenario-stuck .sc-name::before{content:"✕ ";color:var(--red)}
 .scenario-count{font-family:var(--mono);font-size:10px;color:var(--text-muted)}
 
 /* Archive section */
@@ -206,6 +207,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .progress-scenario{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .progress-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .5s ease;box-shadow:0 0 6px var(--accent)}
+.progress-fill.error{background:var(--red);box-shadow:0 0 6px var(--red);transition:none}
 
 /* Toast notifications */
 .toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200;pointer-events:none}
@@ -655,11 +657,21 @@ let currentRunId = null, eventSource = null, editingScenarioIndex = null;
 let transcriptLog = [], systemLog = [], viewingHistoryRun = null, scenarioIndexMap = [];
 let archivedOpen = false;
 let progressTotal = 0, progressHideTimer = null;
+let noResponseTimer = null, noResponseShown = false;
+let currentScenarioIndex = null;
 
 const SK = "xi_tester_cfg3"; // bumped key so old storage doesn't conflict
 function $(id){return document.getElementById(id)}
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
 function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
+
+function formatFileDate(ts) {
+  const d = new Date(ts || Date.now()), p = n => String(n).padStart(2,'0');
+  return `${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}_${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}`;
+}
+function sanitizeName(s) {
+  return (s || '').replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_').trim() || 'Unbekannt';
+}
 
 // ─── Info popup ─────────────────────────────────────────────────────
 function toggleInfo(e){
@@ -895,7 +907,8 @@ async function doStartRun(toRun, origIdx){
 
   requestNotificationPermission();
   try{
-    const resp=await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,docAgentId:doc,patientAgentId:pat,scenarios:scenariosPayload,maxTurns,silenceTime:silence,scenarioIndices:origIdx,basePrompt:globalBase})});
+    const docName = $("docAgentName").textContent.trim() || "";
+    const resp=await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,docAgentId:doc,patientAgentId:pat,scenarios:scenariosPayload,maxTurns,silenceTime:silence,scenarioIndices:origIdx,basePrompt:globalBase,docAgentName:docName})});
     if(!resp.ok){const e=await resp.json();alert("Fehler: "+(e.error||resp.statusText));return}
     const{runId}=await resp.json();currentRunId=runId;setRunningState(true);connectSSE(runId);
   }catch(err){alert("Server nicht erreichbar: "+err.message)}
@@ -914,11 +927,16 @@ async function startSingleScenario(i){
 
 async function skipScenario(){if(!currentRunId)return;try{await fetch(`/api/skip/${currentRunId}`,{method:"POST"})}catch(_){}}
 
-async function stopTestRun(){
+async function stopTestRun(isStuck=false){
   if(!currentRunId)return;
+  disconnectSSE();setRunningState(false); // disconnect first so no more SSE events touch the progress bar
   try{await fetch(`/api/stop/${currentRunId}`,{method:"POST"})}catch(_){}
-  disconnectSSE();setRunningState(false);addSystemMessage("Test manuell gestoppt.","warn");
-  hideProgress(800);
+  if(isStuck){
+    addSystemMessage("⚠ Keine Antwort – Test gestoppt.","warn");
+  } else {
+    addSystemMessage("Test manuell gestoppt.","warn");
+    hideProgress(800);
+  }
 }
 
 function setRunningState(r){
@@ -942,11 +960,23 @@ function updateProgress(current, total, name, completed) {
   fill.style.width = pct + "%";
 }
 
+function stuckProgress() {
+  if (progressHideTimer) { clearTimeout(progressHideTimer); progressHideTimer = null; }
+  const wrap = $("progressBarWrap"), fill = $("progressFill");
+  if (!wrap || !fill) return;
+  fill.classList.add("error"); // turn red, keep current width
+  // auto-hide after 60s
+  progressHideTimer = setTimeout(() => {
+    wrap.style.opacity = "0"; wrap.style.pointerEvents = "none";
+    setTimeout(() => { wrap.style.display = "none"; fill.classList.remove("error"); fill.style.width = "0%"; }, 300);
+  }, 60000);
+}
+
 function hideProgress(delay = 600) {
   if (progressHideTimer) clearTimeout(progressHideTimer);
   const wrap = $("progressBarWrap"), fill = $("progressFill");
   if (!wrap) return;
-  if (fill) fill.style.width = "100%";
+  if (fill && !fill.classList.contains("error")) fill.style.width = "100%"; // skip if already showing error
   progressHideTimer = setTimeout(() => {
     wrap.classList.remove("visible");
     if (fill) fill.style.width = "0%";
@@ -961,10 +991,30 @@ function showToast(text, type = "success", duration = 5000) {
   toast.className = `toast ${type}`;
   toast.textContent = text;
   container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.animation = "toastOut .25s ease forwards";
-    setTimeout(() => toast.remove(), 250);
-  }, duration);
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.style.animation = "toastOut .25s ease forwards";
+      setTimeout(() => toast.remove(), 250);
+    }, duration);
+  }
+}
+
+function showNoResponseHint() {
+  playSound("warn");
+  // Mark current scenario as stuck and stop the run
+  if (currentScenarioIndex !== null) {
+    const idx = scenarioIndexMap[currentScenarioIndex - 1];
+    if (idx !== undefined) markSc(idx, "stuck");
+  }
+  stuckProgress();
+  stopTestRun(true);
+  const container = $("toastContainer");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "toast warn";
+  toast.style.cssText += "max-width:400px;cursor:default;flex-direction:column;align-items:flex-start;gap:6px;line-height:1.5;";
+  toast.innerHTML = `<span style="font-weight:600">⚠ Praxis antwortet nicht?</span><span style="font-size:11px;opacity:.9">Tipp: In ElevenLabs beim Praxis-Agenten unter <strong>Erweitert</strong> den <strong>Chat-Modus aktivieren (Text Only)</strong> und dann erneut starten.</span><button onclick="this.parentElement.remove()" style="border:none;background:rgba(240,160,48,.15);color:var(--orange);cursor:pointer;font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;margin-top:2px;align-self:flex-end">Verstanden ✕</button>`;
+  container.appendChild(toast);
 }
 
 // ─── Sound ───────────────────────────────────────────────────────────
@@ -1014,17 +1064,48 @@ function sendNotification(title, body, type) {
 }
 
 // ─── SSE ─────────────────────────────────────────────────────────────
+function startNoResponseTimer() {
+  if (noResponseShown) return;
+  clearTimeout(noResponseTimer);
+  noResponseTimer = setTimeout(() => {
+    noResponseShown = true;
+    noResponseTimer = null;
+    showNoResponseHint();
+  }, 10000);
+}
+function cancelNoResponseTimer() {
+  clearTimeout(noResponseTimer);
+  noResponseTimer = null;
+}
+
 function connectSSE(runId){
-  disconnectSSE();eventSource=new EventSource(`/api/stream/${runId}`);
+  disconnectSSE();
+  noResponseShown = false; cancelNoResponseTimer();
+  eventSource=new EventSource(`/api/stream/${runId}`);
   eventSource.addEventListener("scenario_start",e=>{
     const d=JSON.parse(e.data);
     addScenarioHeader(d.scenarioIndex,d.totalScenarios,d.name);
     const idx=scenarioIndexMap[d.scenarioIndex-1];
     if(idx!==undefined)markSc(idx,"running");
     progressTotal=d.totalScenarios;
+    currentScenarioIndex=d.scenarioIndex;
     updateProgress(d.scenarioIndex, d.totalScenarios, d.name, d.scenarioIndex-1);
   });
-  eventSource.addEventListener("message",e=>{const d=JSON.parse(e.data);addChatMessage(d.speaker,d.text)});
+  eventSource.addEventListener("init",e=>{
+    const d=JSON.parse(e.data);
+    addSystemMessage(`→ Praxis: "${d.text}" (Initialisierung)`, "info");
+    startNoResponseTimer(); // Warte auf erste PRAXIS-Antwort
+  });
+  eventSource.addEventListener("token",e=>{
+    const d=JSON.parse(e.data);
+    if(d.speaker==="PRAXIS") cancelNoResponseTimer(); // PRAXIS generiert gerade – kein Timeout nötig
+  });
+  eventSource.addEventListener("message",e=>{
+    const d=JSON.parse(e.data);
+    addChatMessage(d.speaker,d.text);
+    if(d.speaker==="PRAXIS") cancelNoResponseTimer();        // PRAXIS hat geantwortet
+    else if(d.speaker==="PATIENT") startNoResponseTimer();  // PATIENT hat geantwortet → auf PRAXIS warten
+  });
   eventSource.addEventListener("log",e=>{const d=JSON.parse(e.data);addSystemLog(d.text,d.type)});
   eventSource.addEventListener("scenario_end",e=>{
     const d=JSON.parse(e.data);
@@ -1035,6 +1116,7 @@ function connectSSE(runId){
     const idx=scenarioIndexMap[d.scenarioIndex-1];
     const state=d.reason==="loop_detected"?"loop":d.reason==="skipped"?"skipped":"done";
     if(idx!==undefined)markSc(idx,state);
+    cancelNoResponseTimer();
     updateProgress(d.scenarioIndex, progressTotal, null, d.scenarioIndex);
     if(d.reason==="timeout"){
       showToast(`⏱ Timeout – Szenario ${d.scenarioIndex} übersprungen`,"warn");
@@ -1055,7 +1137,7 @@ function connectSSE(runId){
     setRunningState(false);disconnectSSE();loadHistory();
     hideProgress(60000);
   });
-  eventSource.addEventListener("done",()=>{disconnectSSE();setRunningState(false);hideProgress(800)});
+  eventSource.addEventListener("done",()=>{cancelNoResponseTimer();disconnectSSE();setRunningState(false);hideProgress(800)});
   eventSource.onerror=()=>addSystemLog("SSE Verbindung verloren","error");
 }
 function disconnectSSE(){if(eventSource){eventSource.close();eventSource=null}}
@@ -1070,12 +1152,13 @@ function addSystemLog(text,type="system"){const d=document.createElement("div");
 
 function markSc(i,state){
   const c=$(`sc-${i}`);if(!c)return;
-  c.classList.remove("active","scenario-done","scenario-loop","scenario-skipped");
+  c.classList.remove("active","scenario-done","scenario-loop","scenario-skipped","scenario-stuck");
   const dot=c.querySelector(".scenario-running");if(dot)dot.remove();
   if(state==="running"){c.classList.add("active");c.querySelector(".sc-name")?.insertAdjacentHTML("afterbegin",'<span class="scenario-running"></span>')}
   else if(state==="done")c.classList.add("scenario-done");
   else if(state==="loop")c.classList.add("scenario-loop");
   else if(state==="skipped")c.classList.add("scenario-skipped");
+  else if(state==="stuck")c.classList.add("scenario-stuck");
 }
 
 function clearTranscript(){tv().innerHTML="";transcriptLog=[];viewingHistoryRun=null;$("historyDetailBar").style.display="none";document.querySelectorAll(".scenario-card").forEach(c=>{c.classList.remove("active","scenario-done","scenario-loop","scenario-skipped");const d=c.querySelector(".scenario-running");if(d)d.remove()})}
@@ -1121,9 +1204,10 @@ function closeHistoryDetail(){viewingHistoryRun=null;$("historyDetailBar").style
 async function exportHistoryRun(runId){
   try{
     const data=await(await fetch(`/api/runs/${runId}`)).json();
-    const lines=[`=== Agent Test Transcript ===`,`Datum: ${new Date(data.startedAt).toLocaleString("de-DE")}`,`Praxis: ${data.docAgentId}`,`Patient: ${data.patientAgentId}`,`=============================\n`];
+    const agentName = sanitizeName(data.docAgentName || data.docAgentId);
+    const lines=[`=== Agent Test Transcript ===`,`Datum: ${new Date(data.startedAt).toLocaleString("de-DE")}`,`Praxis: ${data.docAgentName||data.docAgentId}`,`Patient: ${data.patientAgentId}`,`=============================\n`];
     for(const sc of data.scenarios){lines.push(`\n──── ${sc.name} ────`);lines.push(`Prompt: ${sc.prompt}\n`);for(const m of(sc.transcript||[]))lines.push(`[${m.speaker}]: ${m.text}`);lines.push(`\n→ ${sc.reason} (${sc.duration}s, ${sc.turnCount} Turns)\n`)}
-    const b=new Blob([lines.join("\n")],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`testrun_${new Date(data.startedAt).toISOString().slice(0,19).replace(/:/g,"-")}.txt`;a.click();
+    const b=new Blob([lines.join("\n")],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`${agentName}_${formatFileDate(data.startedAt)}.txt`;a.click();
   }catch(err){alert("Export-Fehler: "+err.message)}
 }
 
@@ -1132,9 +1216,10 @@ async function deleteHistoryRun(id){if(!confirm("Diesen Run löschen?"))return;a
 function downloadCurrentLog(){
   if(viewingHistoryRun){exportHistoryRun(viewingHistoryRun.id);return}
   if(!transcriptLog.length){alert("Kein Transcript.");return}
-  const lines=[`=== Transcript ===`,`Datum: ${new Date().toLocaleString("de-DE")}`,`Praxis: ${$("docAgentId").value}`,`Patient: ${$("patientAgentId").value}`,`==================\n`];
+  const agentName = sanitizeName($("docAgentName").textContent.trim() || $("docAgentId").value.trim());
+  const lines=[`=== Transcript ===`,`Datum: ${new Date().toLocaleString("de-DE")}`,`Praxis: ${$("docAgentName").textContent.trim()||$("docAgentId").value}`,`Patient: ${$("patientAgentId").value}`,`==================\n`];
   for(const l of transcriptLog){if(l.speaker==="SYSTEM")lines.push(`\n--- ${l.text} ---`);else lines.push(`[${l.speaker}]: ${l.text}`)}
-  const b=new Blob([lines.join("\n")],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`transcript_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.txt`;a.click();
+  const b=new Blob([lines.join("\n")],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`${agentName}_${formatFileDate()}.txt`;a.click();
 }
 
 // ─── Help Modal ──────────────────────────────────────────────────────
@@ -1188,6 +1273,30 @@ const debouncedAgentRefresh = debounce(refreshAgentNames, 800);
 ["apiKey","docAgentId","patientAgentId"].forEach(id => {
   $(id)?.addEventListener("input", () => { Object.keys(agentNameCache).forEach(k => delete agentNameCache[k]); debouncedAgentRefresh(); });
 });
+
+// ─── Update Check ──────────────────────────────────────────────────────────
+async function checkForUpdate(currentVersion) {
+  try {
+    const r = await fetch("https://api.github.com/repos/felixkircher/Eleven-Labs-Tester/releases/latest", {
+      headers: { "Accept": "application/vnd.github+json" }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    const latest = d.tag_name?.replace(/^v/, "");
+    if (latest && currentVersion && latest !== currentVersion) {
+      showUpdateBanner(latest, d.html_url);
+    }
+  } catch (_) {}
+}
+
+function showUpdateBanner(version, url) {
+  if ($("updateBanner")) return; // already shown
+  const banner = document.createElement("div");
+  banner.id = "updateBanner";
+  banner.style.cssText = "position:fixed;top:54px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--accent-dim);border-radius:var(--radius-lg);padding:9px 16px;display:flex;align-items:center;gap:12px;z-index:400;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 1px var(--accent-glow);white-space:nowrap;animation:toastIn .25s ease;";
+  banner.innerHTML = `<span style="color:var(--accent);font-family:var(--mono);font-size:11px">🆕 Update verfügbar: <strong>v${esc(version)}</strong></span><a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--accent);font-family:var(--mono);font-size:11px;text-decoration:underline">GitHub →</a><button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;margin-left:2px">✕</button>`;
+  document.body.appendChild(banner);
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────
 async function loadLocalConfig(){
@@ -1265,7 +1374,14 @@ async function restoreLastSession(){
   // Im Electron-Modus: letzten Run wiederherstellen
   if(isElectronMode) await restoreLastSession();
   refreshAgentNames(); // Agent-Namen nach Config-Load anzeigen
-  try { const vr = await fetch("/api/version"); const vd = await vr.json(); if(vd.version) $("versionLabel").textContent = `v${vd.version}`; } catch(_){}
+  try {
+    const vr = await fetch("/api/version"); const vd = await vr.json();
+    if(vd.version) {
+      $("versionLabel").textContent = `v${vd.version}`;
+      checkForUpdate(vd.version);
+      setInterval(() => checkForUpdate(vd.version), 60 * 60 * 1000);
+    }
+  } catch(_){}
 })();
 $("scenarioModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal()});
 $("helpModal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeHelp()});
