@@ -658,7 +658,7 @@ let transcriptLog = [], systemLog = [], viewingHistoryRun = null, scenarioIndexM
 let archivedOpen = false;
 let progressTotal = 0, progressHideTimer = null;
 let noResponseTimer = null, noResponseShown = false;
-let currentScenarioIndex = null;
+let currentScenarioIndex = null, firstExchangeDone = false, consecutiveNoAnswer = 0;
 
 const SK = "xi_tester_cfg3"; // bumped key so old storage doesn't conflict
 function $(id){return document.getElementById(id)}
@@ -989,14 +989,16 @@ function showToast(text, type = "success", duration = 5000) {
   if (!container) return;
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.textContent = text;
-  container.appendChild(toast);
-  if (duration > 0) {
+  if (duration === 0) {
+    toast.innerHTML = `<span style="flex:1">${esc(text)}</span><button onclick="this.closest('.toast').remove()" style="background:none;border:none;color:inherit;opacity:.6;cursor:pointer;padding:0;margin-left:6px;font-size:13px;flex-shrink:0" title="Schließen">✕</button>`;
+  } else {
+    toast.textContent = text;
     setTimeout(() => {
       toast.style.animation = "toastOut .25s ease forwards";
       setTimeout(() => toast.remove(), 250);
     }, duration);
   }
+  container.appendChild(toast);
 }
 
 function showNoResponseHint() {
@@ -1065,13 +1067,14 @@ function sendNotification(title, body, type) {
 
 // ─── SSE ─────────────────────────────────────────────────────────────
 function startNoResponseTimer() {
-  if (noResponseShown) return;
+  // Only active for the first exchange of the first two scenarios
+  if (noResponseShown || firstExchangeDone || currentScenarioIndex > 2) return;
   clearTimeout(noResponseTimer);
   noResponseTimer = setTimeout(() => {
     noResponseShown = true;
     noResponseTimer = null;
     showNoResponseHint();
-  }, 10000);
+  }, 5000);
 }
 function cancelNoResponseTimer() {
   clearTimeout(noResponseTimer);
@@ -1080,7 +1083,7 @@ function cancelNoResponseTimer() {
 
 function connectSSE(runId){
   disconnectSSE();
-  noResponseShown = false; cancelNoResponseTimer();
+  noResponseShown = false; firstExchangeDone = false; consecutiveNoAnswer = 0; cancelNoResponseTimer();
   eventSource=new EventSource(`/api/stream/${runId}`);
   eventSource.addEventListener("scenario_start",e=>{
     const d=JSON.parse(e.data);
@@ -1089,6 +1092,7 @@ function connectSSE(runId){
     if(idx!==undefined)markSc(idx,"running");
     progressTotal=d.totalScenarios;
     currentScenarioIndex=d.scenarioIndex;
+    firstExchangeDone=false;
     updateProgress(d.scenarioIndex, d.totalScenarios, d.name, d.scenarioIndex-1);
   });
   eventSource.addEventListener("init",e=>{
@@ -1103,24 +1107,38 @@ function connectSSE(runId){
   eventSource.addEventListener("message",e=>{
     const d=JSON.parse(e.data);
     addChatMessage(d.speaker,d.text);
-    if(d.speaker==="PRAXIS") cancelNoResponseTimer();        // PRAXIS hat geantwortet
+    if(d.speaker==="PRAXIS"){ cancelNoResponseTimer(); firstExchangeDone=true; } // first PRAXIS reply ends the hint window
     else if(d.speaker==="PATIENT") startNoResponseTimer();  // PATIENT hat geantwortet → auf PRAXIS warten
   });
   eventSource.addEventListener("log",e=>{const d=JSON.parse(e.data);addSystemLog(d.text,d.type)});
   eventSource.addEventListener("scenario_end",e=>{
     const d=JSON.parse(e.data);
-    const reasons={patient_disconnected:"Patient hat aufgelegt",praxis_disconnected:"Praxis hat aufgelegt",max_turns:"Max Turns erreicht",timeout:"⏱ Timeout – übersprungen",ws_error:"Verbindungsfehler",loop_detected:"⟳ Loop erkannt – übersprungen",skipped:"⭭ Manuell übersprungen"};
+    const reasons={patient_disconnected:"Patient hat aufgelegt",praxis_disconnected:"Praxis hat aufgelegt",max_turns:"Max Turns erreicht",timeout:"⏱ Timeout – übersprungen",ws_error:"Verbindungsfehler",loop_detected:"⟳ Loop erkannt – übersprungen",skipped:"⭭ Manuell übersprungen",no_answer:"📵 Keine Antwort – möglicherweise Weiterleitung"};
     const rt=reasons[d.reason]||d.reason;
-    const style=(d.reason==="loop_detected"||d.reason==="timeout"||d.reason==="skipped")?"warn":"info";
+    const style=(d.reason==="loop_detected"||d.reason==="timeout"||d.reason==="skipped"||d.reason==="no_answer")?"warn":"info";
     addSystemMessage(`${rt} (${d.duration}s, ${d.turnCount} Turns)`,style);
     const idx=scenarioIndexMap[d.scenarioIndex-1];
-    const state=d.reason==="loop_detected"?"loop":d.reason==="skipped"?"skipped":"done";
+    const state=d.reason==="loop_detected"?"loop":d.reason==="skipped"?"skipped":d.reason==="no_answer"?"skipped":"done";
     if(idx!==undefined)markSc(idx,state);
     cancelNoResponseTimer();
     updateProgress(d.scenarioIndex, progressTotal, null, d.scenarioIndex);
     if(d.reason==="timeout"){
       showToast(`⏱ Timeout – Szenario ${d.scenarioIndex} übersprungen`,"warn");
       sendNotification("Agent Tester – Timeout", `⏱ Szenario ${d.scenarioIndex} wurde wegen Timeout übersprungen.`, "warn");
+    } else if(d.reason==="no_answer"){
+      consecutiveNoAnswer++;
+      playSound("warn");
+      if(consecutiveNoAnswer >= 3){
+        // 3 Szenarien in Folge ohne Antwort → wahrscheinlich Konfigurationsproblem
+        showNoResponseHint();
+      } else if(d.turnCount <= 1){
+        // Keine erste Antwort → möglicherweise Chat-Modus nicht aktiviert
+        showToast(`⚠ Szenario ${d.scenarioIndex}: Keine erste Antwort – Chat-Modus (Text-Only) aktiviert?`,"warn",0);
+      } else {
+        showToast(`📵 Szenario ${d.scenarioIndex}: Keine Antwort – möglicherweise Weiterleitung`,"warn",0);
+      }
+    } else {
+      consecutiveNoAnswer = 0; // Szenario erfolgreich → Streak zurücksetzen
     }
   });
   eventSource.addEventListener("run_complete",e=>{

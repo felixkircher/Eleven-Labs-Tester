@@ -67,11 +67,11 @@ function broadcast(runId, event, data) {
 function cleanupRun(runId) {
   const run = activeRuns.get(runId);
   if (run) {
-    try { if (run.docWs?.readyState <= WebSocket.OPEN) run.docWs.close(); } catch (_) {}
-    try { if (run.patientWs?.readyState <= WebSocket.OPEN) run.patientWs.close(); } catch (_) {}
+    try { if (run.docWs?.readyState !== WebSocket.CLOSED) run.docWs.terminate(); } catch (_) {}
+    try { if (run.patientWs?.readyState !== WebSocket.CLOSED) run.patientWs.terminate(); } catch (_) {}
     clearTimeout(run.docTimer);
     clearTimeout(run.patientTimer);
-    run.status = "completed";
+    if (run.status !== "stopped") run.status = "completed"; // preserve "stopped" so the run loop exits
     // Remove from map after a delay so any in-flight callbacks can still resolve cleanly
     setTimeout(() => activeRuns.delete(runId), 10000);
   }
@@ -198,7 +198,7 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
     const wsBase = baseUrl.replace("https://", "wss://");
 
     let turnCount = 0, docBuffer = "", patientBuffer = "";
-    let docTimer = null, patientTimer = null;
+    let docTimer = null, patientTimer = null, noAnswerTimer = null;
     let transcript = [], resolved = false;
     const t0 = Date.now();
 
@@ -207,9 +207,9 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
       resolved = true;
       const run = activeRuns.get(runId);
       if (run) run.skipCurrent = null;
-      clearTimeout(safetyTimer); clearTimeout(docTimer); clearTimeout(patientTimer);
-      try { docWs.close(); } catch (_) {}
-      try { patientWs.close(); } catch (_) {}
+      clearTimeout(safetyTimer); clearTimeout(docTimer); clearTimeout(patientTimer); clearTimeout(noAnswerTimer);
+      try { docWs.terminate(); } catch (_) {}
+      try { patientWs.terminate(); } catch (_) {}
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       addRunLog(runId, `Szenario "${scenario.name}" beendet (${reason}) — ${dur}s, ${turnCount} Turns, ${transcript.length} Nachrichten`);
       broadcast(runId, "scenario_end", { scenarioIndex, reason, transcript, duration: dur, turnCount });
@@ -287,6 +287,7 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
           if (msg.type === "agent_response" && msg.agent_response_event?.agent_response) {
             const txt = msg.agent_response_event.agent_response;
             if (ws.agentLabel === "PRAXIS") {
+              clearTimeout(noAnswerTimer); noAnswerTimer = null; // PRAXIS is responding
               broadcast(runId, "token", { speaker: "PRAXIS", text: txt });
               docBuffer += txt + " ";
               clearTimeout(docTimer);
@@ -309,6 +310,12 @@ function runScenario(runId, config, scenario, scenarioIndex, totalScenarios) {
                 if (checkForLoop()) return;
                 if (turnCount >= maxTurns) { done("max_turns"); return; }
                 sendMsg(m, docWs);
+                // If PRAXIS doesn't respond within 10s, assume call forwarding / no answer
+                clearTimeout(noAnswerTimer);
+                noAnswerTimer = setTimeout(() => {
+                  addRunLog(runId, `📵 Keine Antwort von PRAXIS nach 5s — möglicherweise Weiterleitung`, "warn");
+                  done("no_answer");
+                }, 5000);
               }, silenceTime);
             }
           }
@@ -332,8 +339,9 @@ app.post("/api/start", async (req, res) => {
     if (r.status === "running") {
       console.log(`[cleanup] Stopping stale run ${rid} before new start`);
       r.status = "stopped";
-      try { if (r.docWs?.readyState <= WebSocket.OPEN) r.docWs.close(); } catch (_) {}
-      try { if (r.patientWs?.readyState <= WebSocket.OPEN) r.patientWs.close(); } catch (_) {}
+      if (r.skipCurrent) r.skipCurrent();
+      try { if (r.docWs?.readyState !== WebSocket.CLOSED) r.docWs.terminate(); } catch (_) {}
+      try { if (r.patientWs?.readyState !== WebSocket.CLOSED) r.patientWs.terminate(); } catch (_) {}
       saveRunToDisk(rid);
       cleanupRun(rid);
     }
@@ -356,9 +364,11 @@ app.post("/api/start", async (req, res) => {
   addRunLog(runId, `Loop-Erkennung: 3× identisch, per-Agent 3× Wiederholung, Ping-Pong`);
 
   const results = [];
+  let consecutiveNoAnswer = 0;
+  const isStopped = () => activeRuns.get(runId)?.status !== "running";
+
   for (let i = 0; i < scenarios.length; i++) {
-    const run = activeRuns.get(runId);
-    if (!run || run.status === "stopped") { addRunLog(runId, "Test gestoppt.", "warn"); break; }
+    if (isStopped()) { addRunLog(runId, "Test gestoppt.", "warn"); break; }
 
     const sc = scenarios[i];
     addRunLog(runId, `\n── Szenario ${i + 1}/${scenarios.length}: "${sc.name}" ──`);
@@ -378,16 +388,33 @@ app.post("/api/start", async (req, res) => {
       continue;
     }
 
+    if (isStopped()) { addRunLog(runId, "Test gestoppt.", "warn"); break; }
+
     try {
       const result = await runScenario(runId, config, sc, i + 1, scenarios.length);
       results.push(result);
       const rd = activeRuns.get(runId);
       if (rd) rd.scenarioResults.push(result);
+      if (result.reason === "no_answer") {
+        if (++consecutiveNoAnswer >= 3) {
+          addRunLog(runId, "3 Szenarien ohne Antwort in Folge – Test gestoppt.", "warn");
+          const r = activeRuns.get(runId); if (r) r.status = "stopped";
+          break;
+        }
+      } else {
+        consecutiveNoAnswer = 0;
+      }
     } catch (err) {
       addRunLog(runId, `Fehler: ${err.message}`, "error");
     }
 
-    if (i < scenarios.length - 1) { addRunLog(runId, "Cooldown 2s…"); await new Promise(r => setTimeout(r, 2000)); }
+    if (isStopped()) { addRunLog(runId, "Test gestoppt.", "warn"); break; }
+
+    if (i < scenarios.length - 1) {
+      addRunLog(runId, "Cooldown 2s…");
+      await new Promise(r => setTimeout(r, 2000));
+      if (isStopped()) { addRunLog(runId, "Test gestoppt.", "warn"); break; }
+    }
   }
 
   const looped = results.filter(r => r.reason === "loop_detected").length;
@@ -402,8 +429,13 @@ app.post("/api/start", async (req, res) => {
 
 app.post("/api/stop/:runId", (req, res) => {
   const run = activeRuns.get(req.params.runId);
-  if (run) { run.status = "stopped"; saveRunToDisk(req.params.runId); cleanupRun(req.params.runId); res.json({ ok: true }); }
-  else res.status(404).json({ error: "Run not found" });
+  if (run) {
+    run.status = "stopped";
+    if (run.skipCurrent) run.skipCurrent(); // immediately resolve the running runScenario promise
+    saveRunToDisk(req.params.runId);
+    cleanupRun(req.params.runId);
+    res.json({ ok: true });
+  } else res.status(404).json({ error: "Run not found" });
 });
 
 const PORT = process.env.PORT || 3000;
