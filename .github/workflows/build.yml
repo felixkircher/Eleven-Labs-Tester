@@ -14,11 +14,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: dist/**/*.exe
             name: Windows
           - os: macos-latest
-            artifact: dist/**/*.dmg
             name: macOS
+          - os: ubuntu-latest
+            name: Linux
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.name }})
@@ -36,8 +36,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # macOS: Ohne Code-Signing baut electron-builder ein unsigned DMG.
-      # Für ein signiertes Binary müsstest du APPLE_ID etc. als Secrets hinterlegen.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y rpm
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: npm run dist:win
@@ -55,7 +57,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      # Alle Binaries aus dist/ hochladen
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload to Draft Release
         uses: softprops/action-gh-release@v2
         with:
@@ -64,31 +71,42 @@ jobs:
             # Neu in dieser Version
             -
 
-            # Hinweis: macOS und Windows
+            ---
+
+            # Hinweis: Windows
             
-            Da **Agent Tester** noch nicht codesigned ist, zeigt macOS und Windows möglicherweise Warnungen beim Starten der App an.
-
-            ## macOS:
-
-            Nach der Installation musst du die App in den Einstellungen des Systems öffnen und den Schutz vor unbekannten Entwicklern deaktivieren und die App dann "Dennoch öffnen".
-
-            **Dazu gehe wie folgt vor:**
-            1. Öffne die Systemeinstellungen und navigiere zu **"Datenschutz & Sicherheit".**
-            2. Scrolle nach ganz unten bis du bei **"Sicherheit"** bist.
-            3. Bei **"Apps erlauben von"** wähle **"App Store & Bekannte Entwicklungsteams".**
-            4. Versuche die App zu öffnen und klicke bei dem PopUp **"Agent Tester.app" nicht geöffnet"** auf Fertig.
-            5. Jetzt kannst du in den Systemeinstellungen unter dem geänderten Punkt die App **"Dennoch öffnen"** und nun nutzen ;)
-
-            ## Windows:
+            Da **Agent Tester** noch nicht codesigned ist, zeigt Windows möglicherweise Warnungen beim Starten der App an.
 
             **Wenn du die App öffnest, kann es zu einem Windows Defender SmartScreen-Warnhinweis kommen.**
 
             **Klicke auf "Weitere Informationen" → "Noch einmal ausführen", um die App zu starten.**
 
-            ### **Thanks to RapidRAW for the instructions to run :)**
+            ---
+            
+            # Hinweis: Linux
+
+            **Um die App auf Linux zu starten muss FUSE installiert sein.**
+
+            Falls nicht installiert:
+            
+            ```bash
+            sudo pacman -S fuse2
+            ```
+
+            Danach einfach die .AppImage Datei ausführbar machen und starten:
+            
+            ```bash
+            chmod +x AgentTester*.AppImage
+            ./AgentTester*.AppImage
+            ```
+
+            ---
+
+            **Thanks to RapidRAW for the instructions to run :)**
             
           files: |
             dist/*Setup*.exe
             dist/*arm64*.dmg
+            dist/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
